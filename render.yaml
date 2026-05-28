@@ -1,20 +1,14 @@
 # Render Blueprint - SHRUG STAFF Deployment
 #
-# NOTE: Static site buildCommand doesn't work reliably in Blueprint.
-# Recommended: Deploy manually via Render Dashboard instead.
-#
-# Backend (Web Service):  https://dashboard.render.com/select-repo?type=web
-# Frontend (Static Site): https://dashboard.render.com/select-repo?type=static
-#
-# OR use this Blueprint for backend only, create frontend manually:
+# Backend uses Docker (Python 3.11 from Dockerfile)
+# Frontend created manually via Dashboard
 
 services:
-  # ============== FastAPI Backend ==============
+  # ============== FastAPI Backend (via Docker) ==============
   - type: web
     name: shrug-backend
-    runtime: python
-    buildCommand: pip install -r backend/requirements.txt
-    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
