@@ -154,4 +154,14 @@ export const settingsApi = {
   seed: () => api.post('/admin/settings/seed').then((r) => r.data),
 };
 
+// ============== Adjustments (Fines & Bonuses) ==============
+export const adjustmentsApi = {
+  list: (params?: any) =>
+    api.get('/admin/adjustments', { params }).then((r) => r.data),
+  create: (data: { employee_id: number; type: string; amount: number; reason: string; adjustment_date: string }) =>
+    api.post('/admin/adjustments', data).then((r) => r.data),
+  delete: (id: number) =>
+    api.delete(`/admin/adjustments/${id}`).then((r) => r.data),
+};
+
 export default api;

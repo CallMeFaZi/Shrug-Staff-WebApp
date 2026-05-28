@@ -11,6 +11,7 @@ import EmployeesPage from './pages/admin/EmployeesPage';
 import ShiftsPage from './pages/admin/ShiftsPage';
 import AttendanceRecords from './pages/admin/AttendanceRecords';
 import PayrollPage from './pages/admin/PayrollPage';
+import AdjustmentsPage from './pages/admin/AdjustmentsPage';
 import ReportsPage from './pages/admin/ReportsPage';
 import LogsPage from './pages/admin/LogsPage';
 import SettingsPage from './pages/admin/SettingsPage';
@@ -35,6 +36,7 @@ function App() {
           <Route path="shifts" element={<ShiftsPage />} />
           <Route path="attendance" element={<AttendanceRecords />} />
           <Route path="payroll" element={<PayrollPage />} />
+          <Route path="adjustments" element={<AdjustmentsPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="logs" element={<LogsPage />} />
           <Route path="settings" element={<SettingsPage />} />

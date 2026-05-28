@@ -7,6 +7,7 @@ from app.routers.reports import router as reports_router
 from app.routers.logs import router as logs_router
 from app.routers.settings import router as settings_router
 from app.routers.dashboard import router as dashboard_router
+from app.routers.adjustments import router as adjustments_router
 
 __all__ = [
     "recognition_router",
@@ -18,4 +19,5 @@ __all__ = [
     "logs_router",
     "settings_router",
     "dashboard_router",
+    "adjustments_router",
 ]

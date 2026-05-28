@@ -8,6 +8,7 @@ const navItems = [
   { path: '/admin/shifts', label: 'Shifts', icon: '🕐' },
   { path: '/admin/attendance', label: 'Attendance', icon: '📋' },
   { path: '/admin/payroll', label: 'Payroll', icon: '💰' },
+  { path: '/admin/adjustments', label: 'Adjustments', icon: '💸' },
   { path: '/admin/reports', label: 'Reports', icon: '📈' },
   { path: '/admin/logs', label: 'Logs', icon: '📝' },
   { path: '/admin/settings', label: 'Settings', icon: '⚙️' },

@@ -63,7 +63,7 @@ class ShiftOut(BaseModel):
 # ============== Attendance ==============
 class ClockInOut(BaseModel):
     employee_id: int
-    image_data: Optional[str] = None  # base64 image for face verification
+    image_data: Optional[str] = None
 
 
 class AttendanceOut(BaseModel):
@@ -137,7 +137,7 @@ class PinVerifyResponse(BaseModel):
 
 # ============== Settings ==============
 class SettingUpdate(BaseModel):
-    items: List[dict]  # [{key: "admin_pin", value: "123456"}, ...]
+    items: List[dict]
 
 
 class SettingOut(BaseModel):
@@ -166,6 +166,30 @@ class SystemLogOut(BaseModel):
     action: str
     details: Optional[str] = None
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ============== Adjustment (Fine/Bonus) ==============
+class AdjustmentCreate(BaseModel):
+    employee_id: int
+    type: str  # 'fine' or 'bonus'
+    amount: Decimal
+    reason: str
+    adjustment_date: date
+
+
+class AdjustmentOut(BaseModel):
+    id: int
+    employee_id: int
+    type: str
+    amount: Decimal
+    reason: str
+    adjustment_date: date
+    created_at: datetime
+    employee_name: Optional[str] = None
+    employee_code: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -6,6 +6,7 @@ from app.models.attendance_log import AttendanceLog
 from app.models.payroll import Payroll
 from app.models.system_log import SystemLog
 from app.models.setting import Setting
+from app.models.adjustment import Adjustment
 
 __all__ = [
     "Employee",
@@ -16,4 +17,5 @@ __all__ = [
     "Payroll",
     "SystemLog",
     "Setting",
+    "Adjustment",
 ]

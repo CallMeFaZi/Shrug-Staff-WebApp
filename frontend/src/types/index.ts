@@ -87,6 +87,19 @@ export interface SystemLog {
   created_at: string;
 }
 
+export interface Adjustment {
+  id: number;
+  employee_id: number;
+  type: 'fine' | 'bonus';
+  amount: number;
+  reason: string;
+  adjustment_date: string;
+  created_at: string;
+  employee_name?: string;
+  employee_code?: string;
+}
+
+
 export interface AttendanceLog {
   id: number;
   employee_id: number;

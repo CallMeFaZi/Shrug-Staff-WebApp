@@ -1,147 +1,141 @@
 # Face Recognition Service
-# Uses MediaPipe for face detection + landmark-based face encoding
-# Works on Windows without any C++ build tools
+# Uses DeepFace (Facenet) as primary engine for high accuracy.
+# Falls back to MediaPipe landmarks if DeepFace is not available.
 
 import json
 import logging
-import math
 import numpy as np
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
 from sqlalchemy.orm import Session
-
-import mediapipe as mp
-import cv2
-from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-# Initialize MediaPipe Face Mesh
-mp_face_mesh = mp.solutions.face_mesh
-mp_face_detection = mp.solutions.face_detection
+# ----- Try DeepFace first (Docker/Linux - high accuracy) -----
+DEEPFACE_AVAILABLE = False
+try:
+    from deepface import DeepFace
+    DEEPFACE_AVAILABLE = True
+    logger.info("DeepFace loaded - using Facenet for face recognition")
+except ImportError:
+    logger.info("DeepFace not available - falling back to MediaPipe")
 
-# Use FaceDetection for simpler bounding box approach
-# or FaceMesh for detailed landmark-based encoding
-USE_FACE_MESH = True  # Set to False for simpler face detection only
+# ----- Fallback: MediaPipe (Windows local - lower accuracy) -----
+MEDIAPIPE_AVAILABLE = False
+if not DEEPFACE_AVAILABLE:
+    try:
+        import mediapipe as mp
+        mp_face_mesh = mp.solutions.face_mesh
+        MEDIAPIPE_AVAILABLE = True
+        logger.info("MediaPipe loaded - using landmark-based face encoding")
+    except ImportError:
+        logger.warning("No face recognition library available")
 
 
-def _get_face_encoding_from_landmarks(face_landmarks, image_width: int, image_height: int) -> list:
-    """
-    Convert MediaPipe face landmarks to a normalized encoding vector.
-    Extracts 468 face landmarks (x, y, z) = 1404 values.
-    Normalizes to be scale/rotation invariant where possible.
-    """
+# ===================== DEEPFACE METHODS =====================
+
+def encode_face_deepface(image_bytes: bytes) -> Optional[list]:
+    """Extract face encoding using DeepFace Facenet (128-dim embedding)."""
+    import cv2
+    nparr = np.frombuffer(image_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if img is None:
+        return None
+    try:
+        result = DeepFace.represent(
+            img_path=img,
+            model_name="Facenet",
+            detector_backend="opencv",
+            enforce_detection=True,
+            align=True,
+        )
+        if result and len(result) > 0:
+            embedding = result[0]["embedding"]
+            logger.info(f"DeepFace encoding: {len(embedding)} dim")
+            return embedding
+    except ValueError:
+        pass  # No face detected
+    return None
+
+
+# ===================== MEDIAPIPE METHODS =====================
+
+def _get_encoding_from_landmarks(face_landmarks) -> list:
+    """Convert MediaPipe face landmarks to 1404-dim encoding vector."""
     encoding = []
-    # Get nose tip as reference point (landmark 1)
     nose = face_landmarks.landmark[1]
-    
     for landmark in face_landmarks.landmark:
-        # Normalize relative to nose position
-        dx = landmark.x - nose.x
-        dy = landmark.y - nose.y
-        dz = landmark.z - nose.z
-        encoding.extend([dx, dy, dz])
-    
+        encoding.extend([
+            landmark.x - nose.x,
+            landmark.y - nose.y,
+            landmark.z - nose.z,
+        ])
     return encoding
 
 
+def encode_face_mediapipe(image_bytes: bytes) -> Optional[list]:
+    """Extract face encoding using MediaPipe FaceMesh landmarks."""
+    import cv2
+    nparr = np.frombuffer(image_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if img is None:
+        return None
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    with mp_face_mesh.FaceMesh(
+        static_image_mode=True, max_num_faces=1, min_detection_confidence=0.5,
+    ) as face_mesh:
+        results = face_mesh.process(img_rgb)
+        if not results or not results.multi_face_landmarks:
+            return None
+        encoding = _get_encoding_from_landmarks(results.multi_face_landmarks[0])
+        logger.info(f"MediaPipe encoding: {len(encoding)} dim")
+        return encoding
+
+
+# ===================== MAIN ENCODE FUNCTION =====================
+
 def encode_face(image_bytes: bytes) -> Optional[list]:
     """
-    Extract face encoding from image bytes using MediaPipe.
-    Returns a list of normalized landmark coordinates or None if no face detected.
+    Extract face encoding from image bytes.
+    Uses DeepFace Facenet on Docker/Linux (high accuracy,
+    falls back to MediaPipe landmarks on Windows.
     """
-    try:
-        # Convert bytes to numpy array
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if DEEPFACE_AVAILABLE:
+        enc = encode_face_deepface(image_bytes)
+        if enc:
+            return enc
+        logger.warning("DeepFace detection failed, trying MediaPipe fallback")
 
-        if img is None:
-            logger.warning("Failed to decode image")
-            return None
+    if MEDIAPIPE_AVAILABLE:
+        return encode_face_mediapipe(image_bytes)
 
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        height, width = img_rgb.shape[:2]
+    return None
 
-        if USE_FACE_MESH:
-            with mp_face_mesh.FaceMesh(
-                static_image_mode=True,
-                max_num_faces=1,
-                min_detection_confidence=0.5,
-            ) as face_mesh:
-                results = face_mesh.process(img_rgb)
 
-                if not results or not results.multi_face_landmarks:
-                    logger.warning("No face detected in image")
-                    return None
-
-                # Take the first face
-                landmarks = results.multi_face_landmarks[0]
-                encoding = _get_face_encoding_from_landmarks(landmarks, width, height)
-
-                logger.info(f"Face encoded via MediaPipe landmarks, dim={len(encoding)}")
-                return encoding
-        else:
-            # Simple face detection fallback
-            with mp_face_detection.FaceDetection(min_detection_confidence=0.5) as face_detection:
-                results = face_detection.process(img_rgb)
-
-                if not results or not results.detections:
-                    logger.warning("No face detected in image")
-                    return None
-
-                detection = results.detections[0]
-                bbox = detection.location_data.relative_bounding_box
-
-                # Use bounding box as simple encoding (not ideal but works)
-                encoding = [bbox.xmin, bbox.ymin, bbox.width, bbox.height]
-                logger.info(f"Face detected via MediaPipe, dim={len(encoding)}")
-                return encoding
-
-    except Exception as e:
-        logger.error(f"Face encoding error: {e}")
-        return None
-
+# ===================== COMPARISON =====================
 
 def compare_faces(encoding1: list, encoding2: list) -> float:
     """
-    Compare two face encodings using normalized cosine similarity.
-    Returns a similarity score between 0 and 1.
+    Compare two face encodings using cosine similarity.
+    Returns similarity between 0 and 1.
     """
-    if not encoding1 or not encoding2:
-        return 0.0
-    
     vec1 = np.array(encoding1, dtype=np.float64)
     vec2 = np.array(encoding2, dtype=np.float64)
-
-    # Normalize
     norm1 = np.linalg.norm(vec1)
     norm2 = np.linalg.norm(vec2)
-
     if norm1 == 0 or norm2 == 0:
         return 0.0
-
-    vec1 = vec1 / norm1
-    vec2 = vec2 / norm2
-
-    # Cosine similarity
+    vec1 /= norm1
+    vec2 /= norm2
     similarity = float(np.dot(vec1, vec2))
-    
-    # Convert from [-1, 1] to [0, 1] range
+    # DeepFace uses [-1,1], MediaPipe uses [-1,1] too
     similarity = (similarity + 1.0) / 2.0
-    
-    # Clamp
-    similarity = max(0.0, min(1.0, similarity))
-
-    return similarity
+    return max(0.0, min(1.0, similarity))
 
 
 def find_best_match(encoding: list, stored_encodings: list) -> Tuple[Optional[int], float]:
-    """
-    Find the best matching employee from a list of stored encodings.
-    Returns (employee_id, confidence) or (None, 0.0).
-    """
+    """Find the best matching employee from stored encodings."""
     best_id = None
     best_score = 0.0
-
     for emp_id, stored_enc in stored_encodings:
         try:
             score = compare_faces(encoding, stored_enc)
@@ -151,30 +145,22 @@ def find_best_match(encoding: list, stored_encodings: list) -> Tuple[Optional[in
         except Exception as e:
             logger.warning(f"Error comparing face for employee {emp_id}: {e}")
             continue
-
     from app.config import settings
     if best_score >= settings.FACE_CONFIDENCE_THRESHOLD:
         return best_id, best_score
-
     return None, best_score
 
 
 def load_all_encodings(db: Session) -> list:
-    """
-    Load all face encodings from the database.
-    Returns list of (employee_id, encoding_list) tuples.
-    """
+    """Load all face encodings from database."""
     from app.models.employee_face import EmployeeFace
-
     faces = db.query(EmployeeFace).all()
     result = []
     for face in faces:
         try:
             enc = json.loads(face.face_encoding)
             result.append((face.employee_id, enc))
-        except (json.JSONDecodeError, TypeError) as e:
-            logger.warning(f"Failed to decode face encoding for face_id={face.id}: {e}")
+        except (json.JSONDecodeError, TypeError):
             continue
-
-    logger.info(f"Loaded {len(result)} face encodings from database")
+    logger.info(f"Loaded {len(result)} face encodings")
     return result

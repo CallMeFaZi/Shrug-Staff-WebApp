@@ -1,4 +1,5 @@
 from datetime import date
+from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
@@ -7,6 +8,7 @@ from app.database import get_db
 from app.models.attendance import Attendance
 from app.models.employee import Employee
 from app.models.payroll import Payroll
+from app.models.adjustment import Adjustment
 from app.models.system_log import SystemLog
 from app.schemas import PayrollOut, PayrollGenerate
 from app.routers.admin_auth import require_admin
@@ -84,8 +86,28 @@ def generate_payroll(data: PayrollGenerate, db: Session = Depends(get_db)):
                 absent_days += 1
                 unpaid_days += 1
 
-        # Deductions already applied at clock-out time, don't double-count here
-        # The late deduction was already subtracted from the daily payment
+        # Calculate fines and bonuses for this employee/month
+        start_date = date(year, month, 1)
+        import calendar
+        last_day = calendar.monthrange(year, month)[1]
+        end_date = date(year, month, last_day)
+
+        fines_total = 0
+        bonuses_total = 0
+        adjustments = db.query(Adjustment).filter(
+            Adjustment.employee_id == emp.id,
+            Adjustment.adjustment_date >= start_date,
+            Adjustment.adjustment_date <= end_date,
+        ).all()
+        for adj in adjustments:
+            if adj.type == "fine":
+                fines_total += float(adj.amount)
+            elif adj.type == "bonus":
+                bonuses_total += float(adj.amount)
+
+        # Apply fines and bonuses
+        total_salary += bonuses_total
+        total_deductions += fines_total
 
         final_salary = max(0, total_salary - total_deductions)
 
