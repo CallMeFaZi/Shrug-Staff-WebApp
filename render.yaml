@@ -1,8 +1,12 @@
 # Render Blueprint - SHRUG STAFF Deployment
-# Deploy with: https://render.com/docs/blueprint-spec
 #
-# IMPORTANT: PostgreSQL must be created manually via Render Dashboard first.
-# Then set DATABASE_URL + VITE_API_URL as environment variables manually.
+# NOTE: Static site buildCommand doesn't work reliably in Blueprint.
+# Recommended: Deploy manually via Render Dashboard instead.
+#
+# Backend (Web Service):  https://dashboard.render.com/select-repo?type=web
+# Frontend (Static Site): https://dashboard.render.com/select-repo?type=static
+#
+# OR use this Blueprint for backend only, create frontend manually:
 
 services:
   # ============== FastAPI Backend ==============
@@ -21,21 +25,3 @@ services:
         value: '["*"]'
       - key: DEBUG
         value: "false"
-
-  # ============== React Frontend (Static Site) ==============
-  - type: web
-    name: shrug-frontend
-    runtime: static
-    buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: ./frontend/dist
-    pullRequestPreviewsEnabled: false
-    envVars:
-      - key: VITE_API_URL
-        sync: false
-    headers:
-      - path: /*
-        name: X-Frame-Options
-        value: DENY
-      - path: /*
-        name: X-Content-Type-Options
-        value: nosniff
