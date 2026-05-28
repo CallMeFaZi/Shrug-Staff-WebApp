@@ -1,15 +1,10 @@
 # Render Blueprint - SHRUG STAFF Deployment
 # Deploy with: https://render.com/docs/blueprint-spec
-# Connect your GitHub repo and Render will auto-deploy
+#
+# IMPORTANT: PostgreSQL must be created manually via Render Dashboard first.
+# See README for step-by-step instructions.
 
 services:
-  # ============== PostgreSQL Database ==============
-  - type: postgresql
-    name: shrug-db
-    plan: free
-    databaseName: shrug_staff
-    user: shrug_admin
-
   # ============== FastAPI Backend ==============
   - type: web
     name: shrug-backend
@@ -20,9 +15,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: shrug-db
-          property: connectionString
+        sync: false
       - key: SECRET_KEY
         generateValue: true
       - key: CORS_ORIGINS
@@ -40,10 +33,7 @@ services:
     pullRequestPreviewsEnabled: false
     envVars:
       - key: VITE_API_URL
-        fromService:
-          name: shrug-backend
-          type: web
-          property: hostname
+        sync: false
     headers:
       - path: /*
         name: X-Frame-Options
