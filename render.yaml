@@ -2,13 +2,12 @@
 # Deploy with: https://render.com/docs/blueprint-spec
 #
 # IMPORTANT: PostgreSQL must be created manually via Render Dashboard first.
-# See README for step-by-step instructions.
+# Then set DATABASE_URL + VITE_API_URL as environment variables manually.
 
 services:
   # ============== FastAPI Backend ==============
   - type: web
     name: shrug-backend
-    plan: free
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
@@ -23,10 +22,9 @@ services:
       - key: DEBUG
         value: "false"
 
-  # ============== React Frontend ==============
+  # ============== React Frontend (Static Site) ==============
   - type: web
     name: shrug-frontend
-    plan: free
     runtime: static
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
