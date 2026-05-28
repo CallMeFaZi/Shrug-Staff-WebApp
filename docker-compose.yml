@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: shrug-postgres
+    environment:
+      POSTGRES_DB: shrug_staff
+      POSTGRES_USER: shrug_admin
+      POSTGRES_PASSWORD: shrug_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shrug_admin -d shrug_staff"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: shrug-backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:Faizan1018%40@postgres:5432/shrug_staff
+      SECRET_KEY: shrug-staff-secret-key-change-in-production
+      DEBUG: "true"
+      CORS_ORIGINS: '["http://localhost:5173","http://localhost:80","http://localhost"]'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend:/app
+
+  frontend:
+    build: ./frontend
+    container_name: shrug-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

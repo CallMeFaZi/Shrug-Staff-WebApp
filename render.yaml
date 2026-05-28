@@ -1,0 +1,53 @@
+# Render Blueprint - SHRUG STAFF Deployment
+# Deploy with: https://render.com/docs/blueprint-spec
+# Connect your GitHub repo and Render will auto-deploy
+
+services:
+  # ============== PostgreSQL Database ==============
+  - type: postgresql
+    name: shrug-db
+    plan: free
+    databaseName: shrug_staff
+    user: shrug_admin
+
+  # ============== FastAPI Backend ==============
+  - type: web
+    name: shrug-backend
+    plan: free
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: shrug-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: '["*"]'
+      - key: DEBUG
+        value: "false"
+
+  # ============== React Frontend ==============
+  - type: web
+    name: shrug-frontend
+    plan: free
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    pullRequestPreviewsEnabled: false
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          name: shrug-backend
+          type: web
+          property: hostname
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
