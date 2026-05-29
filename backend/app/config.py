@@ -16,9 +16,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours
 
     # Face Recognition
-    # FaceNet produces 128-dim embeddings. 0.75 is a reliable threshold
-    # for distinguishing different people. Lower = more false matches.
-    FACE_CONFIDENCE_THRESHOLD: float = 0.78
+    # FaceNet L2 distance threshold (lower = stricter)
+    # ~0.6 = same person, ~1.0+ = different person
+    FACE_CONFIDENCE_THRESHOLD: float = 0.65
 
     # CORS - allow all origins in production (mobile app)
     CORS_ORIGINS: list = ["*"]

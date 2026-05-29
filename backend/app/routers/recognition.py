@@ -44,13 +44,13 @@ def recognize_descriptor(data: DescriptorMatch, db: Session = Depends(get_db)):
                 message="No registered faces found in the system.",
             )
 
-        matched_id, confidence = find_best_match(encoding, stored_encodings)
+        matched_id, distance = find_best_match(encoding, stored_encodings)
 
         if matched_id is None:
             log = SystemLog(
                 module="recognition",
                 action="unknown_face",
-                details=f"Unknown face, confidence={confidence:.4f} (below {settings.FACE_CONFIDENCE_THRESHOLD})",
+                details=f"Unknown face, distance={distance:.4f} (above threshold {settings.FACE_CONFIDENCE_THRESHOLD})",
             )
             db.add(log)
             db.commit()
