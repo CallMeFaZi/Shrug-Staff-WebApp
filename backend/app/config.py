@@ -16,8 +16,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours
 
     # Face Recognition
-    FACE_CONFIDENCE_THRESHOLD: float = 0.65
-    FACE_MODEL: str = "MediaPipe"
+    # FaceNet produces 128-dim embeddings. 0.75 is a reliable threshold
+    # for distinguishing different people. Lower = more false matches.
+    FACE_CONFIDENCE_THRESHOLD: float = 0.78
 
     # CORS - allow all origins in production (mobile app)
     CORS_ORIGINS: list = ["*"]
