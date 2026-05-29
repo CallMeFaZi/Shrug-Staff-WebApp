@@ -12,7 +12,6 @@ from app.models.shift import Shift
 from app.models.system_log import SystemLog
 from app.schemas import EmployeeCreate, EmployeeUpdate, EmployeeOut, ShiftCreate, ShiftOut
 from app.routers.admin_auth import require_admin
-from app.services.face_recognition import encode_face
 from app.services.salary_calculator import calculate_hourly_rate
 from app.config import settings
 
