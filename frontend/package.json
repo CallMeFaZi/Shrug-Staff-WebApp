@@ -10,7 +10,7 @@
     "postinstall": "node scripts/download-models.cjs"
   },
   "dependencies": {
-    "@vladmandic/face-api": "^1.8.0",
+    "@vladmandic/face-api": "^1.7.15",
     "axios": "^1.6.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
