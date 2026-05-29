@@ -11,6 +11,7 @@ from app.services.face_recognition import find_best_match, load_all_encodings
 from app.models.employee import Employee
 from app.models.employee_face import EmployeeFace
 from app.models.system_log import SystemLog
+from app.routers.admin_auth import require_admin
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -93,10 +94,9 @@ def register_face_descriptor(
     employee_id: int,
     data: DescriptorStore,
     db: Session = Depends(get_db),
+    _admin: bool = Depends(require_admin),
 ):
     """Store a face descriptor (128-dim vector from client-side face-api.js) for an employee."""
-    from app.routers.admin_auth import require_admin
-    # Admin auth is handled by router dependency injection in the calling route
     
     employee = db.query(Employee).filter(Employee.id == employee_id).first()
     if not employee:
