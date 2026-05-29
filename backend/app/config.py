@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # Face Recognition
     # FaceNet produces 128-dim embeddings. 0.75 is a reliable threshold
     # for distinguishing different people. Lower = more false matches.
-    FACE_CONFIDENCE_THRESHOLD: float = 0.78
+    FACE_CONFIDENCE_THRESHOLD: float = 0.4
 
     # CORS - allow all origins in production (mobile app)
     CORS_ORIGINS: list = ["*"]
