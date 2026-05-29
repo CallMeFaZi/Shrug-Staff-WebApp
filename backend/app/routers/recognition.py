@@ -1,88 +1,75 @@
+import json
 import logging
-import base64
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from typing import List
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.schemas import RecognizeResponse, EmployeeOut
-from app.services.face_recognition import encode_face, find_best_match, load_all_encodings
+from app.services.face_recognition import find_best_match, load_all_encodings
 from app.models.employee import Employee
+from app.models.employee_face import EmployeeFace
 from app.models.system_log import SystemLog
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Recognition"])
 
 
-@router.post("/recognize", response_model=RecognizeResponse)
-async def recognize_face(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-):
+class DescriptorMatch(BaseModel):
+    descriptor: List[float]
+
+
+class DescriptorStore(BaseModel):
+    descriptor: List[float]
+
+
+@router.post("/recognize-descriptor", response_model=RecognizeResponse)
+def recognize_descriptor(data: DescriptorMatch, db: Session = Depends(get_db)):
     """
-    Upload a face image and get the matched employee.
-    Server-side face recognition using InsightFace.
+    Match a face descriptor (128-dim vector from client-side face-api.js)
+    against stored employee face encodings.
     """
     try:
-        # Read image bytes
-        image_bytes = await file.read()
+        encoding = data.descriptor
+        if not encoding or len(encoding) < 10:
+            raise HTTPException(status_code=400, detail="Invalid descriptor")
 
-        if not image_bytes:
-            raise HTTPException(status_code=400, detail="Empty image data")
-
-        # Encode face
-        encoding = encode_face(image_bytes)
-        if encoding is None:
-            return RecognizeResponse(
-                matched=False,
-                employee=None,
-                confidence=None,
-                message="No face detected in the image. Please try again with a clearer photo.",
-            )
-
-        # Load all stored encodings and find best match
         stored_encodings = load_all_encodings(db)
         if not stored_encodings:
             return RecognizeResponse(
-                matched=False,
-                employee=None,
-                confidence=None,
+                matched=False, employee=None, confidence=None,
                 message="No registered faces found in the system.",
             )
 
         matched_id, confidence = find_best_match(encoding, stored_encodings)
 
         if matched_id is None:
-            # Log unknown face attempt
             log = SystemLog(
                 module="recognition",
                 action="unknown_face",
-                details=f"Unknown face detected, confidence={confidence:.4f} (below threshold)",
+                details=f"Unknown face, confidence={confidence:.4f} (below {settings.FACE_CONFIDENCE_THRESHOLD})",
             )
             db.add(log)
             db.commit()
 
             return RecognizeResponse(
-                matched=False,
-                employee=None,
-                confidence=confidence,
-                message=f"No matching employee found. Confidence: {confidence:.2f}",
+                matched=False, employee=None, confidence=confidence,
+                message=f"No matching employee found.",
             )
 
-        # Get employee details
         employee = db.query(Employee).filter(Employee.id == matched_id, Employee.active.is_(True)).first()
         if not employee:
             return RecognizeResponse(
-                matched=False,
-                employee=None,
-                confidence=confidence,
-                message="Matched employee is not active in the system.",
+                matched=False, employee=None, confidence=confidence,
+                message="Matched employee is not active.",
             )
 
-        # Log successful recognition
         log = SystemLog(
             module="recognition",
             action="face_matched",
-            details=f"Employee {employee.employee_code} ({employee.full_name}) matched with confidence={confidence:.4f}",
+            details=f"Employee {employee.employee_code} ({employee.full_name}) confidence={confidence:.4f}",
         )
         db.add(log)
         db.commit()
@@ -99,3 +86,45 @@ async def recognize_face(
     except Exception as e:
         logger.error(f"Recognition error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Face recognition failed: {str(e)}")
+
+
+@router.post("/admin/employees/{employee_id}/face-descriptor", response_model=dict)
+def register_face_descriptor(
+    employee_id: int,
+    data: DescriptorStore,
+    db: Session = Depends(get_db),
+):
+    """Store a face descriptor (128-dim vector from client-side face-api.js) for an employee."""
+    from app.routers.admin_auth import require_admin
+    # Admin auth is handled by router dependency injection in the calling route
+    
+    employee = db.query(Employee).filter(Employee.id == employee_id).first()
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+
+    encoding = data.descriptor
+    if not encoding or len(encoding) < 10:
+        raise HTTPException(status_code=400, detail="Invalid descriptor")
+
+    # Remove old face encodings
+    old_faces = db.query(EmployeeFace).filter(EmployeeFace.employee_id == employee_id).all()
+    for old_face in old_faces:
+        db.delete(old_face)
+
+    # Store new descriptor
+    face = EmployeeFace(
+        employee_id=employee_id,
+        face_encoding=json.dumps(encoding),
+        image_path=None,
+    )
+    db.add(face)
+
+    log = SystemLog(
+        module="employees",
+        action="face_descriptor_registered",
+        details=f"Face descriptor registered for {employee.employee_code} ({employee.full_name}), dim={len(encoding)}",
+    )
+    db.add(log)
+    db.commit()
+
+    return {"message": f"Face registered successfully for {employee.full_name}", "encoding_dim": len(encoding)}

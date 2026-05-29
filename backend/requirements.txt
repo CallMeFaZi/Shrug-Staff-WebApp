@@ -9,7 +9,4 @@ pydantic-settings==2.1.0
 python-jose[cryptography]==3.3.0
 passlib==1.7.4
 bcrypt==4.1.2
-opencv-python-headless==4.9.0.80
-numpy==1.26.2
 Pillow==11.2.1
-mediapipe==0.10.21

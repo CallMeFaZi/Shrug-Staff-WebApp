@@ -93,17 +93,12 @@ export const attendanceApi = {
     api.get(`/employee/${employeeId}`).then((r) => r.data),
 };
 
-// ============== Recognition ==============
+// ============== Recognition (Client-Side Descriptor) ==============
 export const recognitionApi = {
-  recognize: (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    return api
-      .post('/recognize', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      .then((r) => r.data);
-  },
+  recognizeDescriptor: (descriptor: number[]) =>
+    api.post('/recognize-descriptor', { descriptor }).then((r) => r.data),
+  registerDescriptor: (employeeId: number, descriptor: number[]) =>
+    api.post(`/admin/employees/${employeeId}/face-descriptor`, { descriptor }).then((r) => r.data),
 };
 
 // ============== Admin Dashboard ==============

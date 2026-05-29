@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { employeesApi, shiftsApi } from '../../api/client';
+import { useFaceDetection } from '../../hooks/useFaceDetection';
 import type { Employee, Shift } from '../../types';
 
 export default function EmployeesPage() {
@@ -98,7 +99,7 @@ export default function EmployeesPage() {
       </div>
 
       {showModal && <EmployeeFormModal employee={editingEmployee} shifts={shifts} onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); loadData(); }} />}
-      {showFaceModal && <FaceRegistrationModal employeeId={showFaceModal} onClose={() => setShowFaceModal(null)} onUpload={async (id, file) => { await employeesApi.registerFace(id, file); toast.success('Face registered'); setShowFaceModal(null); }} />}
+      {showFaceModal && <FaceRegistrationModal employeeId={showFaceModal} onClose={() => setShowFaceModal(null)} />}
     </div>
   );
 }
@@ -139,14 +140,15 @@ function EmployeeFormModal({ employee, shifts, onClose, onSaved }: { employee: E
   );
 }
 
-function FaceRegistrationModal({ employeeId, onClose, onUpload }: { employeeId: number; onClose: () => void; onUpload: (id: number, file: File) => Promise<void> }) {
-  const [file, setFile] = useState<File | null>(null);
+function FaceRegistrationModal({ employeeId, onClose }: { employeeId: number; onClose: () => void }) {
   const [uploading, setUploading] = useState(false);
-  const [mode, setMode] = useState<'upload' | 'camera'>('upload');
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [camStream, setCamStream] = useState<MediaStream | null>(null);
   const [camReady, setCamReady] = useState(false);
+  const [descriptor, setDescriptor] = useState<number[] | null>(null);
+  const { modelsLoaded, extractDescriptor } = useFaceDetection();
+  const modelsLoading = !modelsLoaded;
 
   const startCamera = async () => {
     try {
@@ -163,48 +165,76 @@ function FaceRegistrationModal({ employeeId, onClose, onUpload }: { employeeId: 
     }
   }, [camReady, camStream]);
 
-  const captureFromCamera = () => {
+  const captureDescriptor = async () => {
     if (!videoRef.current || !canvasRef.current) return;
-    const v = videoRef.current; const c = canvasRef.current;
-    c.width = v.videoWidth || 640; c.height = v.videoHeight || 480;
-    const ctx = c.getContext('2d'); if (!ctx) return;
+    const c = canvasRef.current;
+    const v = videoRef.current;
+    c.width = v.videoWidth || 640;
+    c.height = v.videoHeight || 480;
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
     ctx.drawImage(v, 0, 0);
-    c.toBlob(blob => {
-      if (!blob) return;
-      setFile(new File([blob], `face_${employeeId}.jpg`, { type: 'image/jpeg' }));
-      if (camStream) { camStream.getTracks().forEach(t => t.stop()); setCamStream(null); setCamReady(false); }
-    }, 'image/jpeg', 0.9);
+    const desc = await extractDescriptor(c);
+    if (!desc) { toast.error('No face detected'); return; }
+    setDescriptor(desc);
+    if (camStream) { camStream.getTracks().forEach(t => t.stop()); setCamStream(null); setCamReady(false); }
   };
 
-  useEffect(() => () => { if (camStream) camStream.getTracks().forEach(t => t.stop()); }, [camStream]);
-
-  const handleSubmit = async () => { if (!file) return; setUploading(true); await onUpload(employeeId, file); setUploading(false); };
+  const handleSubmit = async () => {
+    if (!descriptor) return;
+    setUploading(true);
+    try {
+      const { recognitionApi } = await import('../../api/client');
+      await recognitionApi.registerDescriptor(employeeId, descriptor);
+      toast.success('Face registered successfully');
+      onClose();
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to register face');
+    } finally { setUploading(false); }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-[#1e293b] rounded-2xl p-6 max-w-sm w-full border border-gray-700/50" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-bold text-white mb-4">Register Face</h2>
-        <div className="flex gap-2 mb-4">
-          <button onClick={() => { setMode('upload'); if (camStream) camStream.getTracks().forEach(t => t.stop()); setCamStream(null); setCamReady(false); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium ${mode === 'upload' ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300'}`}>📁 Upload</button>
-          <button onClick={() => { setMode('camera'); startCamera(); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium ${mode === 'camera' ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300'}`}>📸 Live Camera</button>
-        </div>
-        {mode === 'upload' ? (
-          <><p className="text-xs text-gray-400 mb-3">Upload a clear photo of the face</p><input type="file" accept="image/*" onChange={e => setFile(e.target.files?.[0] || null)} className="input-field text-sm" /></>
-        ) : (
-          <div className="mb-4">
-            <canvas ref={canvasRef} className="hidden" />
-            <div className="bg-black rounded-xl overflow-hidden mb-3" style={{ aspectRatio: '4/3' }}>
-              {camReady ? <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', display: 'block' }} />
-                : <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: '13px' }}>Starting camera...</div>}
+        <p className="text-xs text-gray-400 mb-4">Look at the camera and press Capture to register your face</p>
+
+        <canvas ref={canvasRef} className="hidden" />
+        <div className="bg-black rounded-xl overflow-hidden mb-3" style={{ aspectRatio: '4/3' }}>
+          {descriptor ? (
+            <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div className="text-center">
+                <div className="text-3xl mb-2">✅</div>
+                <p className="text-xs text-green-400">Face captured!</p>
+              </div>
             </div>
-            {camReady && <button onClick={captureFromCamera} className="btn-primary w-full text-sm">📸 Capture</button>}
-          </div>
-        )}
-        {file && !camReady && <div className="mb-3 p-2 bg-green-500/10 border border-green-500/20 rounded-lg text-xs text-green-400 text-center">✅ Photo ready</div>}
-        <div className="flex gap-3">
-          <button onClick={handleSubmit} disabled={!file || uploading} className="btn-primary flex-1 text-sm">{uploading ? 'Uploading...' : 'Save Face'}</button>
+          ) : camReady ? (
+            <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', display: 'block' }} />
+          ) : (
+            <div style={{ height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: '13px' }}>
+              {modelsLoading ? 'Loading AI models...' : 'Camera off'}
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          {!descriptor ? (
+            <>
+              {!camReady ? (
+                <button onClick={startCamera} disabled={modelsLoading} className="btn-primary text-sm flex-1">
+                  {modelsLoading ? '⏳ Loading...' : '📷 Start Camera'}
+                </button>
+              ) : (
+                <button onClick={captureDescriptor} className="btn-primary text-sm flex-1">
+                  📸 Capture Face
+                </button>
+              )}
+            </>
+          ) : (
+            <button onClick={handleSubmit} disabled={uploading} className="btn-primary text-sm flex-1">
+              {uploading ? 'Saving...' : '💾 Save Face'}
+            </button>
+          )}
           <button onClick={onClose} className="btn-secondary text-sm">Cancel</button>
         </div>
       </div>

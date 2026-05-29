@@ -12,6 +12,7 @@ from app.routers import (
     logs_router,
     settings_router,
     dashboard_router,
+    adjustments_router,
 )
 
 # Create all tables

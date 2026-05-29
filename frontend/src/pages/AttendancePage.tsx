@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { useFaceDetection } from '../hooks/useFaceDetection';
+import { useBlinkDetection } from '../hooks/useBlinkDetection';
 
 export default function AttendancePage() {
   const navigate = useNavigate();
@@ -9,6 +11,11 @@ export default function AttendancePage() {
   const [isCameraOn, setIsCameraOn] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [blinking, setBlinking] = useState(false);
+  const animFrameRef = useRef<number>(0);
+
+  const { modelsLoaded, loading: modelsLoading, extractDescriptor } = useFaceDetection();
+  const { checkBlink, resetBlink } = useBlinkDetection();
 
   const startCamera = useCallback(async () => {
     try {
@@ -18,7 +25,7 @@ export default function AttendancePage() {
       setStream(mediaStream);
       setIsCameraOn(true);
     } catch {
-      toast.error('Camera access denied. Please allow camera permissions.');
+      toast.error('Camera access denied');
     }
   }, []);
 
@@ -29,9 +36,16 @@ export default function AttendancePage() {
     }
   }, [isCameraOn, stream]);
 
+  const stopCamera = useCallback(() => {
+    if (stream) { stream.getTracks().forEach(t => t.stop()); setStream(null); }
+    setIsCameraOn(false);
+    cancelAnimationFrame(animFrameRef.current);
+  }, [stream]);
+
   const captureAndRecognize = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current) return;
     setIsProcessing(true);
+
     try {
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -40,13 +54,23 @@ export default function AttendancePage() {
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('no ctx');
       ctx.drawImage(video, 0, 0);
-      const blob = await new Promise<Blob>(resolve => canvas.toBlob(b => resolve(b!), 'image/jpeg', 0.9));
-      const file = new File([blob], 'face.jpg', { type: 'image/jpeg' });
+
+      // Extract face descriptor using face-api.js
+      const descriptor = await extractDescriptor(canvas);
+      if (!descriptor) {
+        toast.error('No face detected. Please position your face clearly.');
+        setIsProcessing(false);
+        return;
+      }
+
       const { recognitionApi } = await import('../api/client');
-      const result = await recognitionApi.recognize(file);
+      const result = await recognitionApi.recognizeDescriptor(descriptor);
+
       if (result.matched && result.employee) {
         if (stream) stream.getTracks().forEach(t => t.stop());
-        navigate(`/confirm/${result.employee.id}`, { state: { employee: result.employee, confidence: result.confidence } });
+        navigate(`/confirm/${result.employee.id}`, {
+          state: { employee: result.employee, confidence: result.confidence },
+        });
       } else {
         toast.error(result.message || 'Face not recognized');
         setIsProcessing(false);
@@ -55,27 +79,24 @@ export default function AttendancePage() {
       toast.error(err.response?.data?.detail || 'Recognition failed');
       setIsProcessing(false);
     }
-  }, [navigate, stream]);
-
-  const stopCamera = useCallback(() => {
-    if (stream) { stream.getTracks().forEach(t => t.stop()); setStream(null); }
-    setIsCameraOn(false);
-  }, [stream]);
+  }, [navigate, stream, extractDescriptor]);
 
   return (
     <div className="min-h-screen bg-[#0f172a] flex flex-col items-center justify-center p-4">
       <canvas ref={canvasRef} className="hidden" />
 
-      <div className="text-center mb-6">
+      <div className="text-center mb-4">
         <h1 className="text-xl font-bold text-white mb-1">Face Recognition</h1>
-        <p className="text-sm text-gray-400">Look at the camera to mark your attendance</p>
+        <p className="text-sm text-gray-400">
+          {modelsLoading ? 'Loading AI models...' : modelsLoaded ? 'Look at the camera' : 'Model failed to load'}
+        </p>
+        {blinking && <p className="text-xs text-green-400 mt-1">✅ Blink detected!</p>}
       </div>
 
       <div className="camera-container bg-black rounded-2xl overflow-hidden shadow-2xl border border-gray-700/50" style={{ maxWidth: '400px', position: 'relative' }}>
         {isCameraOn ? (
           <>
             <video ref={videoRef} autoPlay playsInline muted style={{ width: '100%', display: 'block' }} />
-            {/* Face overlay circle on top of video */}
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
               <div style={{ width: '160px', height: '160px', border: '2px dashed rgba(96,165,250,0.4)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <span style={{ color: 'rgba(96,165,250,0.6)', fontSize: '12px', textAlign: 'center' }}>Position<br/>face here</span>
@@ -96,13 +117,13 @@ export default function AttendancePage() {
 
       <div className="mt-6 flex gap-3">
         {!isCameraOn ? (
-          <button onClick={startCamera} className="btn-primary px-8 py-3 text-base">
-            📷 Start Camera
+          <button onClick={startCamera} disabled={modelsLoading} className="btn-primary px-8 py-3 text-base">
+            {modelsLoading ? '⏳ Loading...' : '📷 Start Camera'}
           </button>
         ) : (
           <>
             <button onClick={captureAndRecognize} disabled={isProcessing} className="btn-primary px-6 py-3 text-base">
-              {isProcessing ? '⏳ Processing...' : '📸 Capture'}
+              {isProcessing ? '⏳ Processing...' : '📸 Recognize'}
             </button>
             <button onClick={stopCamera} className="btn-secondary px-5 py-3">Stop</button>
           </>
