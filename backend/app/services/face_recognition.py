@@ -14,11 +14,17 @@ logger = logging.getLogger(__name__)
 def compare_faces(encoding1: list, encoding2: list) -> float:
     """
     Compare two face descriptors using cosine similarity.
-    FaceNet produces non-negative embeddings, so cosine similarity
-    naturally ranges [0, 1]. No rescaling needed.
+    FaceNet produces 128-dim non-negative embeddings.
+    Cosine similarity naturally ranges [0, 1] for FaceNet.
     """
     if not encoding1 or not encoding2:
         return 0.0
+    
+    # CRITICAL: Reject dimension mismatch (old MediaPipe = 1404, FaceNet = 128)
+    if len(encoding1) != len(encoding2):
+        logger.warning(f"Dimension mismatch: {len(encoding1)} vs {len(encoding2)}")
+        return 0.0
+    
     vec1 = np.array(encoding1, dtype=np.float64)
     vec2 = np.array(encoding2, dtype=np.float64)
     norm1 = np.linalg.norm(vec1)
@@ -26,7 +32,6 @@ def compare_faces(encoding1: list, encoding2: list) -> float:
     if norm1 < 1e-10 or norm2 < 1e-10:
         return 0.0
     similarity = float(np.dot(vec1 / norm1, vec2 / norm2))
-    # FaceNet produces values in [0, 1] — clamp to be safe
     return max(0.0, min(1.0, similarity))
 
 
