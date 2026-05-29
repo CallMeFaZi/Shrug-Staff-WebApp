@@ -14,18 +14,19 @@ logger = logging.getLogger(__name__)
 def compare_faces(encoding1: list, encoding2: list) -> float:
     """
     Compare two face descriptors using cosine similarity.
-    Returns similarity between 0 and 1.
+    FaceNet produces non-negative embeddings, so cosine similarity
+    naturally ranges [0, 1]. No rescaling needed.
     """
+    if not encoding1 or not encoding2:
+        return 0.0
     vec1 = np.array(encoding1, dtype=np.float64)
     vec2 = np.array(encoding2, dtype=np.float64)
     norm1 = np.linalg.norm(vec1)
     norm2 = np.linalg.norm(vec2)
-    if norm1 == 0 or norm2 == 0:
+    if norm1 < 1e-10 or norm2 < 1e-10:
         return 0.0
-    vec1 /= norm1
-    vec2 /= norm2
-    similarity = float(np.dot(vec1, vec2))
-    similarity = (similarity + 1.0) / 2.0
+    similarity = float(np.dot(vec1 / norm1, vec2 / norm2))
+    # FaceNet produces values in [0, 1] — clamp to be safe
     return max(0.0, min(1.0, similarity))
 
 
