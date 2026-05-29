@@ -56,21 +56,21 @@ def recognize_descriptor(data: DescriptorMatch, db: Session = Depends(get_db)):
             db.commit()
 
             return RecognizeResponse(
-                matched=False, employee=None, confidence=confidence,
+                matched=False, employee=None, confidence=distance,
                 message=f"No matching employee found.",
             )
 
         employee = db.query(Employee).filter(Employee.id == matched_id, Employee.active.is_(True)).first()
         if not employee:
             return RecognizeResponse(
-                matched=False, employee=None, confidence=confidence,
+                matched=False, employee=None, confidence=distance,
                 message="Matched employee is not active.",
             )
 
         log = SystemLog(
             module="recognition",
             action="face_matched",
-            details=f"Employee {employee.employee_code} ({employee.full_name}) confidence={confidence:.4f}",
+            details=f"Employee {employee.employee_code} ({employee.full_name}) distance={distance:.4f}",
         )
         db.add(log)
         db.commit()
@@ -78,7 +78,7 @@ def recognize_descriptor(data: DescriptorMatch, db: Session = Depends(get_db)):
         return RecognizeResponse(
             matched=True,
             employee=EmployeeOut.model_validate(employee),
-            confidence=confidence,
+            confidence=distance,
             message=f"Welcome, {employee.full_name}!",
         )
 
