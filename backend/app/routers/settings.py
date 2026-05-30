@@ -6,36 +6,24 @@ from app.database import get_db
 from app.models.setting import Setting
 from app.models.system_log import SystemLog
 from app.schemas import SettingUpdate, SettingOut
+from app.routers.admin_auth import require_admin
 
-router = APIRouter(prefix="/api", tags=["Settings"])
-admin_router = APIRouter(prefix="/api/admin", tags=["Admin Settings"])
-
-# ============== PUBLIC ENDPOINTS ==============
-
-@router.get("/geo-settings", response_model=dict)
-def get_geo_settings(db: Session = Depends(get_db)):
-    """Public endpoint: get geo-fencing settings (no auth required)."""
-    geo_keys = ["geo_lat", "geo_lng", "geo_radius"]
-    result = {}
-    for key in geo_keys:
-        setting = db.query(Setting).filter(Setting.key == key).first()
-        result[key] = setting.value if setting else ""
-    return result
+router = APIRouter(prefix="/api/admin", tags=["Admin Settings"], dependencies=[Depends(require_admin)])
 
 
-# ============== ADMIN ENDPOINTS ==============
-
-
-@admin_router.get("/settings", response_model=List[SettingOut])
+@router.get("/settings", response_model=List[SettingOut])
 def get_settings(db: Session = Depends(get_db)):
     """Get all system settings."""
     settings = db.query(Setting).order_by(Setting.key).all()
     return settings
 
 
-@admin_router.put("/settings", response_model=dict)
+@router.put("/settings", response_model=dict)
 def update_settings(data: SettingUpdate, db: Session = Depends(get_db)):
-    """Update system settings."""
+    """
+    Update system settings.
+    Example body: {"items": [{"key": "admin_pin", "value": "123456"}]}
+    """
     updated = []
     for item in data.items:
         key = item.get("key")
@@ -61,10 +49,11 @@ def update_settings(data: SettingUpdate, db: Session = Depends(get_db)):
     db.add(log)
     db.commit()
 
-    return {"message": "Settings updated successfully", "updated": updated}
+    return {"message": f"Settings updated successfully", "updated": updated}
 
 
-@admin_router.post("/settings/seed", response_model=dict)
+# Default settings seed endpoint
+@router.post("/settings/seed", response_model=dict)
 def seed_default_settings(db: Session = Depends(get_db)):
     """Seed default settings if they don't exist."""
     defaults = {
@@ -98,4 +87,4 @@ def seed_default_settings(db: Session = Depends(get_db)):
         db.add(log)
         db.commit()
 
-    return {"message": "Settings seeded", "created": created, "total_defaults": len(defaults)}
+    return {"message": f"Settings seeded", "created": created, "total_defaults": len(defaults)}

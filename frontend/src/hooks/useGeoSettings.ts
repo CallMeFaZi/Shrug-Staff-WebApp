@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import api from '../api/client';
+import { settingsApi } from '../api/client';
 
 interface GeoSettings {
   geo_lat: string;
@@ -14,13 +14,16 @@ export function useGeoSettings() {
   useEffect(() => {
     (async () => {
       try {
-        // Use the public geo endpoint (no auth needed)
-        const res = await api.get('/geo-settings').then(r => r.data);
-        setGeo({
-          geo_lat: res.geo_lat || '',
-          geo_lng: res.geo_lng || '',
-          geo_radius: res.geo_radius || '50',
-        });
+        const settings = await settingsApi.get();
+        if (Array.isArray(settings)) {
+          const map: Record<string, string> = {};
+          settings.forEach((s: any) => (map[s.key] = s.value));
+          setGeo({
+            geo_lat: map['geo_lat'] || '',
+            geo_lng: map['geo_lng'] || '',
+            geo_radius: map['geo_radius'] || '50',
+          });
+        }
       } catch {
         // ignore
       } finally {
