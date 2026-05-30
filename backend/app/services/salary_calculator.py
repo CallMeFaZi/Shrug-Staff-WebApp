@@ -1,51 +1,3 @@
-# Salary Calculation Service
-
-from decimal import Decimal, ROUND_HALF_UP
-from app.models.setting import Setting
-from sqlalchemy.orm import Session
-
-
-def get_settings_dict(db: Session) -> dict:
-    """Fetch all settings as a dictionary."""
-    settings_rows = db.query(Setting).all()
-    return {s.key: s.value for s in settings_rows}
-
-
-def calculate_hourly_rate(
-    monthly_salary: Decimal,
-    working_days: int = 26,
-    daily_hours: Decimal = Decimal("10.4"),
-) -> Decimal:
-    """
-    Calculate hourly rate from monthly salary.
-
-    Formula:
-        hourly_rate = monthly_salary / (working_days * daily_hours)
-    """
-    if working_days == 0 or daily_hours == 0:
-        return Decimal("0")
-
-    total_hours = Decimal(str(working_days)) * daily_hours
-    if total_hours == 0:
-        return Decimal("0")
-
-    rate = monthly_salary / total_hours
-    return rate.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-
-def calculate_daily_pay(
-    total_hours_worked: Decimal,
-    hourly_rate: Decimal,
-) -> Decimal:
-    """
-    Calculate pay for a single day.
-
-    daily_pay = total_hours_worked * hourly_rate
-    """
-    pay = total_hours_worked * hourly_rate
-    return pay.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-
 def calculate_late_deductions(
     late_minutes: int,
     grace_minutes: int = 15,
@@ -55,21 +7,29 @@ def calculate_late_deductions(
     """
     Calculate late attendance deductions.
 
+    Rules (as specified):
+    - 15 min grace period (clock in 04:00-04:14)
+    - At 04:15:00 (15 min late) = first -100 PKR
+    - At 04:20:00 (20 min late) = another -100 PKR
+    - At 04:25:00 (25 min late) = another -100 PKR
+    - At 04:30:00 (30 min late or more) = Absent for whole day
+
     Returns:
         (deduction_amount, is_absent, status)
     """
-    # Minutes late beyond grace period
+    # If within grace period
     excess_minutes = late_minutes - grace_minutes
 
-    if excess_minutes <= 0:
+    if excess_minutes < 0:
         return Decimal("0"), False, "present"
 
-    if excess_minutes > 30:
-        # More than 30 min late after grace = absent for the day
+    # 30+ min late = absent for the day
+    if late_minutes >= 30:
         return Decimal("0"), True, "absent"
 
-    # Deduct for every N-minute block
-    blocks = excess_minutes // deduction_interval
+    # Calculate blocks: first deduction kicks in immediately after grace
+    # Blocks counted as: 1 block for 15-19 min, 2 blocks for 20-24, 3 blocks for 25-29
+    blocks = max(1, (excess_minutes + deduction_interval - 1) // deduction_interval)
     total_deduction = Decimal(str(blocks)) * deduction_amount
 
     return total_deduction, False, "late"
