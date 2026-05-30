@@ -3,8 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useFaceDetection } from '../hooks/useFaceDetection';
 import { useBlinkDetection } from '../hooks/useBlinkDetection';
-import { useGeolocation } from '../hooks/useGeolocation';
-import { useGeoSettings } from '../hooks/useGeoSettings';
 
 export default function AttendancePage() {
   const navigate = useNavigate();
@@ -14,30 +12,12 @@ export default function AttendancePage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [blinking, setBlinking] = useState(false);
-  const [geoDenied, setGeoDenied] = useState(false);
-  const [geoDistance, setGeoDistance] = useState<number | null>(null);
   const animFrameRef = useRef<number>(0);
 
   const { modelsLoaded, loading: modelsLoading, extractDescriptor } = useFaceDetection();
   const { checkBlink, resetBlink } = useBlinkDetection();
-  const { checkLocation, checking: geoChecking } = useGeolocation();
-  const { geo } = useGeoSettings();
 
   const startCamera = useCallback(async () => {
-    // First check location if geo settings exist
-    const geoLat = parseFloat(geo?.geo_lat || '');
-    const geoLng = parseFloat(geo?.geo_lng || '');
-    const geoRadius = parseFloat(geo?.geo_radius || '50');
-
-    if (geoLat && geoLng) {
-      const result = await checkLocation(geoLat, geoLng, geoRadius);
-      if (!result.allowed) {
-        setGeoDenied(true);
-        setGeoDistance(result.distance);
-        return;
-      }
-    }
-
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: 640, height: 480 },
@@ -47,7 +27,7 @@ export default function AttendancePage() {
     } catch {
       toast.error('Camera access denied');
     }
-  }, [geo, checkLocation]);
+  }, []);
 
   useEffect(() => {
     if (isCameraOn && videoRef.current && stream) {
@@ -108,15 +88,7 @@ export default function AttendancePage() {
       <div className="text-center mb-4">
         <h1 className="text-xl font-bold text-white mb-1">Face Recognition</h1>
         <p className="text-sm text-gray-400">
-          {geoChecking
-            ? 'Checking your location...'
-            : geoDenied
-            ? `You're ${geoDistance}m away — must be at the counter`
-            : modelsLoading
-            ? 'Loading AI models...'
-            : modelsLoaded
-            ? 'Look at the camera'
-            : 'Model failed to load'}
+          {modelsLoading ? 'Loading AI models...' : modelsLoaded ? 'Look at the camera' : 'Model failed to load'}
         </p>
         {blinking && <p className="text-xs text-green-400 mt-1">✅ Blink detected!</p>}
       </div>

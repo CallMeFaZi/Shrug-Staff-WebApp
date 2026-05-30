@@ -41,8 +41,6 @@ export default function SettingsPage() {
     late_deduction_amount: 'Late Deduction (PKR)', late_max_minutes: 'Max Late Before Absent (min)',
     working_days_per_month: 'Working Days / Month', daily_working_hours: 'Daily Hours',
     face_confidence_threshold: 'Face Confidence',
-    geo_lat: '📍 Counter Latitude', geo_lng: '📍 Counter Longitude',
-    geo_radius: '📍 Allowed Radius (meters)',
   };
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-500">Loading...</div>;

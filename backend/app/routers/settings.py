@@ -65,9 +65,7 @@ def seed_default_settings(db: Session = Depends(get_db)):
         "working_days_per_month": "26",
         "daily_working_hours": "10.4",
         "face_confidence_threshold": "0.65",
-        "geo_lat": "31.550258",
-        "geo_lng": "74.284766",
-        "geo_radius": "50",
+        "face_model": "MediaPipe",
     }
 
     created = []
