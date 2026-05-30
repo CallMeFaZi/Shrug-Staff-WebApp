@@ -1,3 +1,6 @@
+from decimal import Decimal, ROUND_HALF_UP
+
+
 def calculate_late_deductions(
     late_minutes: int,
     grace_minutes: int = 15,
@@ -17,19 +20,18 @@ def calculate_late_deductions(
     Returns:
         (deduction_amount, is_absent, status)
     """
-    # If within grace period
-    excess_minutes = late_minutes - grace_minutes
-
-    if excess_minutes < 0:
+    # If still within grace period
+    if late_minutes < grace_minutes:
         return Decimal("0"), False, "present"
 
     # 30+ min late = absent for the day
     if late_minutes >= 30:
         return Decimal("0"), True, "absent"
 
-    # Calculate blocks: first deduction kicks in immediately after grace
-    # Blocks counted as: 1 block for 15-19 min, 2 blocks for 20-24, 3 blocks for 25-29
-    blocks = max(1, (excess_minutes + deduction_interval - 1) // deduction_interval)
+    # Calculate blocks past grace:
+    # Each 5-min segment after grace = 1 block
+    # 15-19 min = 1 block, 20-24 = 2 blocks, 25-29 = 3 blocks
+    blocks = ((late_minutes - grace_minutes) // deduction_interval) + 1
     total_deduction = Decimal(str(blocks)) * deduction_amount
 
     return total_deduction, False, "late"
