@@ -5,7 +5,7 @@ from app.routers.employees import router as employees_router
 from app.routers.payroll import router as payroll_router
 from app.routers.reports import router as reports_router
 from app.routers.logs import router as logs_router
-from app.routers.settings import router as settings_router
+from app.routers.settings import router as settings_router, admin_router as settings_admin_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.adjustments import router as adjustments_router
 
