@@ -21,18 +21,26 @@ export function useFaceDetection() {
     if (loadedRef.current) return;
     loadedRef.current = true;
 
+    // Load models with a timeout (30 s). If it takes longer we show an error instead of hanging forever.
     async function load() {
+      const timeoutMs = 30000;
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Model load timeout (30 s)')), timeoutMs)
+      );
       try {
-        await Promise.all([
-          faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+        await Promise.race([
+          Promise.all([
+            faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+          ]),
+          timeout,
         ]);
         setModelsLoaded(true);
         setLoading(false);
       } catch (err) {
         console.error('FaceAPI model load error:', err);
-        setError('Failed to load face detection models');
+        setError(err instanceof Error ? err.message : 'Failed to load face detection models');
         setLoading(false);
       }
     }
