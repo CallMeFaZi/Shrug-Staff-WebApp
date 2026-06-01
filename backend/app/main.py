@@ -11,6 +11,7 @@ from app.routers import (
     reports_router,
     logs_router,
     settings_router,
+    settings_admin_router,
     dashboard_router,
     adjustments_router,
 )
