@@ -54,6 +54,7 @@ def clock_in_employee(
     # Default status
     status = "present"
     deduction = Decimal("0")
+    reason = ""
 
     if shift:
         grace_minutes = shift.grace_minutes
@@ -72,6 +73,11 @@ def clock_in_employee(
                 late_minutes=late_minutes,
                 grace_minutes=grace_minutes,
             )
+            # Set reason to reflect lateness (e.g., "30 Mins late")
+            reason = f"{int(late_minutes)} Mins late"
+            # If absent (30+ mins late), use a distinct status string
+            if is_absent:
+                status = "absent - 30+ mins late"
 
     # Get hourly rate
     hourly_rate = employee.hourly_rate or Decimal("0")
@@ -152,7 +158,10 @@ def clock_out_employee(
         }
         deduction_amount = Decimal(settings_dict.get("late_deduction_amount", "100"))
         daily_pay = max(Decimal("0"), daily_pay - deduction_amount)
-
+    # If absent (30+ mins late), payment is 0
+    elif attendance.status == "absent":
+        daily_pay = Decimal("0")
+        
     attendance.payment = daily_pay
 
     # Log

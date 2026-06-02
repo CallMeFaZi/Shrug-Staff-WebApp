@@ -94,7 +94,7 @@ class AttendanceFilter(BaseModel):
 # ============== Payroll ==============
 class PayrollOut(BaseModel):
     id: int
-    employee_id: int
+    employee_name: Optional[str] = None
     month: int
     year: int
     total_days: int

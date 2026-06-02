@@ -121,11 +121,13 @@ def generate_payroll(data: PayrollGenerate, db: Session = Depends(get_db)):
             existing.total_salary = round(total_salary, 2)
             existing.deductions = round(total_deductions, 2)
             existing.final_salary = round(final_salary, 2)
+            existing.employee_name = emp.full_name
             generated.append(existing)
         else:
             # Create new record
             payroll = Payroll(
                 employee_id=emp.id,
+                employee_name=emp.full_name,
                 month=month,
                 year=year,
                 total_days=total_days_in_month,
