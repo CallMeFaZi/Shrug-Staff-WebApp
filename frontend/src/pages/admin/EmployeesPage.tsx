@@ -53,9 +53,6 @@ export default function EmployeesPage() {
         onChange={e => handleSearch(e.target.value)} className="input-field max-w-md mb-5" />
 
       <div className="flex gap-2 mb-4">
-        <button onClick={() => setSearch('')} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${!search.startsWith('show:') ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300'}`}>Active</button>
-        <button onClick={() => setSearch('show:inactive')} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${search === 'show:inactive' ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300'}`}>Inactive</button>
-        <button onClick={() => setSearch('show:all')} className={`px-3 py-1.5 rounded-lg text-xs font-medium ${search === 'show:all' ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300'}`}>All</button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
