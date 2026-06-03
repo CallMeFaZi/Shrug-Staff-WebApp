@@ -55,18 +55,12 @@ def calculate_late_deductions(
     Returns:
         (deduction_amount, is_absent, status)
     """
-    # If still within grace period
-    if late_minutes < grace_minutes:
-        return Decimal("0"), False, "present"
-
-    # 30+ min late = absent for the day
-    if late_minutes >= 30:
+    if late_minutes < 30:
+        if late_minutes <= grace_minutes:
+            deduction = Decimal("0")
+        else:
+            blocks = ((late_minutes - grace_minutes) // deduction_interval) + 1
+            deduction = blocks * deduction_amount
+        return deduction, False, "late"
+    else:
         return Decimal("0"), True, "absent"
-
-    # Calculate blocks past grace:
-    # Each 5-min segment after grace = 1 block
-    # 15-19 min = 1 block, 20-24 = 2 blocks, 25-29 = 3 blocks
-    blocks = ((late_minutes - grace_minutes) // deduction_interval) + 1
-    total_deduction = Decimal(str(blocks)) * deduction_amount
-
-    return total_deduction, False, "late"

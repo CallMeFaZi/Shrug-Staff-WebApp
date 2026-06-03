@@ -16,7 +16,10 @@ class Attendance(Base):
     status = Column(String(20), default="present")
     payment = Column(Numeric(12, 2), default=0)
     reason = Column(Text, nullable=True)
+    late_minutes = Column(Numeric(5, 2), nullable=True)  # Changed to Numeric to store fractional minutes
+    late_deduction = Column(Numeric(12, 2), default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
 
     employee = relationship("Employee", back_populates="attendance_records")
 

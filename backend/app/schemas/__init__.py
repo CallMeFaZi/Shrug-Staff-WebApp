@@ -76,6 +76,8 @@ class AttendanceOut(BaseModel):
     status: str
     payment: Decimal
     reason: Optional[str] = None
+    late_minutes: Optional[Decimal] = None
+    late_deduction: Optional[Decimal] = None
     created_at: datetime
     employee_name: Optional[str] = None
     employee_code: Optional[str] = None
@@ -94,6 +96,7 @@ class AttendanceFilter(BaseModel):
 # ============== Payroll ==============
 class PayrollOut(BaseModel):
     id: int
+    employee_id: int
     employee_name: Optional[str] = None
     month: int
     year: int
