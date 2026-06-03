@@ -38,6 +38,7 @@ export interface Attendance {
 export interface Payroll {
   id: number;
   employee_id: number;
+  employee_name: string;
   month: number;
   year: number;
   total_days: number;
