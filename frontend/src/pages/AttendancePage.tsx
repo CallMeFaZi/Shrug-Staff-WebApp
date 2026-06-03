@@ -57,7 +57,10 @@ export default function AttendancePage() {
   }, [isCameraOn, stream]);
 
   const stopCamera = useCallback(() => {
-    if (stream) { stream.getTracks().forEach(t => t.stop()); setStream(null); }
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+      setStream(null);
+    }
     setIsCameraOn(false);
     cancelAnimationFrame(animFrameRef.current);
   }, [stream]);
@@ -102,180 +105,180 @@ export default function AttendancePage() {
   }, [navigate, stream, extractDescriptor]);
 
   return (
-  <div
-    className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-300 ${
-      isCameraOn ? 'bg-white' : 'bg-[#0f172a]'
-    }`}
-  >
-    <canvas ref={canvasRef} className="hidden" />
-
-    <div className="text-center mb-4">
-      <h1
-        className={`text-xl font-bold mb-1 ${
-          isCameraOn ? 'text-black' : 'text-white'
-        }`}
-      >
-        Face Recognition
-      </h1>
-
-      <p
-        className={`text-sm ${
-          isCameraOn ? 'text-gray-700' : 'text-gray-400'
-        }`}
-      >
-        {geoChecking
-          ? 'Checking your location...'
-          : geoDenied
-          ? `You're ${geoDistance}m away - must be at the counter`
-          : modelsLoading
-          ? 'Loading AI models...'
-          : modelsLoaded
-          ? 'Look at the camera'
-          : 'Model failed to load'}
-      </p>
-
-      {blinking && (
-        <p className="text-xs text-green-500 mt-1">
-          ✅ Blink detected!
-        </p>
-      )}
-    </div>
-
     <div
-      className={`camera-container rounded-2xl overflow-hidden shadow-2xl border transition-colors duration-300 ${
-        isCameraOn
-          ? 'bg-white border-gray-300'
-          : 'bg-black border-gray-700/50'
+      className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-300 ${
+        isCameraOn ? 'bg-white' : 'bg-[#0f172a]'
       }`}
-      style={{
-        maxWidth: '400px',
-        position: 'relative',
-      }}
     >
-      {isCameraOn ? (
-        <>
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            style={{
-              width: '100%',
-              display: 'block',
-            }}
-          />
+      <canvas ref={canvasRef} className="hidden" />
 
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              pointerEvents: 'none',
-            }}
-          >
+      <div className="text-center mb-4">
+        <h1
+          className={`text-xl font-bold mb-1 ${
+            isCameraOn ? 'text-black' : 'text-white'
+          }`}
+        >
+          Face Recognition
+        </h1>
+
+        <p
+          className={`text-sm ${
+            isCameraOn ? 'text-gray-700' : 'text-gray-400'
+          }`}
+        >
+          {geoChecking
+            ? 'Checking your location...'
+            : geoDenied
+            ? `You're ${geoDistance}m away - must be at the counter`
+            : modelsLoading
+            ? 'Loading AI models...'
+            : modelsLoaded
+            ? 'Look at the camera'
+            : 'Model failed to load'}
+        </p>
+
+        {blinking && (
+          <p className="text-xs text-green-500 mt-1">
+            ✅ Blink detected!
+          </p>
+        )}
+      </div>
+
+      <div
+        className={`camera-container rounded-2xl overflow-hidden shadow-2xl border transition-colors duration-300 ${
+          isCameraOn
+            ? 'bg-white border-gray-300'
+            : 'bg-black border-gray-700/50'
+        }`}
+        style={{
+          maxWidth: '400px',
+          position: 'relative',
+        }}
+      >
+        {isCameraOn ? (
+          <>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              style={{
+                width: '100%',
+                display: 'block',
+              }}
+            />
+
             <div
               style={{
-                width: '160px',
-                height: '160px',
-                border: '2px dashed rgba(96,165,250,0.5)',
-                borderRadius: '50%',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                pointerEvents: 'none',
               }}
             >
-              <span
+              <div
                 style={{
-                  color: 'rgba(96,165,250,0.8)',
-                  fontSize: '12px',
-                  textAlign: 'center',
+                  width: '160px',
+                  height: '160px',
+                  border: '2px dashed rgba(96,165,250,0.5)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
               >
-                Position
-                <br />
-                face here
-              </span>
+                <span
+                  style={{
+                    color: 'rgba(96,165,250,0.8)',
+                    fontSize: '12px',
+                    textAlign: 'center',
+                  }}
+                >
+                  Position
+                  <br />
+                  face here
+                </span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div
+            style={{
+              aspectRatio: '3/4',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#1e293b',
+            }}
+          >
+            <div className="text-center text-gray-500">
+              <svg
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  margin: '0 auto 12px',
+                }}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
+                />
+              </svg>
+
+              <p className="text-sm">Camera off</p>
             </div>
           </div>
-        </>
-      ) : (
-        <div
-          style={{
-            aspectRatio: '3/4',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: '#1e293b',
-          }}
-        >
-          <div className="text-center text-gray-500">
-            <svg
-              style={{
-                width: '48px',
-                height: '48px',
-                margin: '0 auto 12px',
-              }}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+        )}
+      </div>
+
+      <div className="mt-6 flex gap-3">
+        {!isCameraOn ? (
+          <button
+            onClick={startCamera}
+            disabled={modelsLoading}
+            className="btn-primary px-8 py-3 text-base"
+          >
+            {modelsLoading ? '⏳ Loading...' : '📷 Start Camera'}
+          </button>
+        ) : (
+          <>
+            <button
+              onClick={captureAndRecognize}
+              disabled={isProcessing}
+              className="btn-primary px-6 py-3 text-base"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-              />
-            </svg>
+              {isProcessing ? '⏳ Processing...' : '📸 Recognize'}
+            </button>
 
-            <p className="text-sm">Camera off</p>
-          </div>
-        </div>
-      )}
-    </div>
+            <button
+              onClick={stopCamera}
+              className="btn-secondary px-5 py-3"
+            >
+              Stop
+            </button>
+          </>
+        )}
+      </div>
 
-    <div className="mt-6 flex gap-3">
-      {!isCameraOn ? (
-        <button
-          onClick={startCamera}
-          disabled={modelsLoading}
-          className="btn-primary px-8 py-3 text-base"
-        >
-          {modelsLoading ? '⏳ Loading...' : '📷 Start Camera'}
-        </button>
-      ) : (
-        <>
-          <button
-            onClick={captureAndRecognize}
-            disabled={isProcessing}
-            className="btn-primary px-6 py-3 text-base"
-          >
-            {isProcessing ? '⏳ Processing...' : '📸 Recognize'}
-          </button>
-
-          <button
-            onClick={stopCamera}
-            className="btn-secondary px-5 py-3"
-          >
-            Stop
-          </button>
-        </>
-      )}
-    </div>
-
-    <button
-      onClick={() => navigate('/')}
-      className={`mt-6 text-xs transition-colors ${
-        isCameraOn
-          ? 'text-gray-700 hover:text-black'
-          : 'text-gray-500 hover:text-gray-300'
-      }`}
-    >
-      ← Back
+      <button
+        onClick={() => navigate('/')}
+        className={`mt-6 text-xs transition-colors ${
+          isCameraOn
+            ? 'text-gray-700 hover:text-black'
+            : 'text-gray-500 hover:text-gray-300'
+        }`}
+      >
+        ← Back
       </button>
     </div>
   );
