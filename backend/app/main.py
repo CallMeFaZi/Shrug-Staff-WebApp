@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.database import engine, Base
+from app.database import engine, Base, ensure_all_tables_and_columns
 from app.routers import (
     recognition_router,
     attendance_router,
@@ -16,8 +16,9 @@ from app.routers import (
     adjustments_router,
 )
 
-# Create all tables
+# Create all tables and ensure schema is up-to-date
 Base.metadata.create_all(bind=engine)
+ensure_all_tables_and_columns()
 
 app = FastAPI(
     title=settings.APP_NAME,
