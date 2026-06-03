@@ -21,6 +21,7 @@ def list_payroll(
     month: int = None,
     year: int = None,
     employee_id: int = None,
+    employee_name: int = None,
     db: Session = Depends(get_db),
 ):
     """List payroll records with optional filters."""
@@ -30,10 +31,12 @@ def list_payroll(
         query = query.filter(Payroll.month == month)
     if year:
         query = query.filter(Payroll.year == year)
-    if employee_id:
-        query = query.filter(Payroll.employee_id == employee_id)
+    if employee_name:
+        query = query.filter(Payroll.employee_name == employee_name)
+    if employee_name:
+        query = query.filter(Payroll.employee_name == employee_name)
 
-    return query.order_by(Payroll.year.desc(), Payroll.month.desc(), Payroll.employee_id).all()
+    return query.order_by(Payroll.year.desc(), Payroll.month.desc(), Payroll.employee_id, Payroll.employee_name).all()
 
 
 @router.post("/payroll/generate", response_model=List[PayrollOut])
@@ -48,6 +51,7 @@ def generate_payroll(data: PayrollGenerate, db: Session = Depends(get_db)):
         # Check if payroll already exists - UPDATE instead of skip
         existing = db.query(Payroll).filter(
             Payroll.employee_id == emp.id,
+            Payroll.employee_name == emp.full_name,
             Payroll.month == month,
             Payroll.year == year,
         ).first()
@@ -68,6 +72,7 @@ def generate_payroll(data: PayrollGenerate, db: Session = Depends(get_db)):
 
         attendance_records = db.query(Attendance).filter(
             Attendance.employee_id == emp.id,
+            Attendance.employee_name == emp.full_name,
             Attendance.attendance_date >= start_date,
             Attendance.attendance_date <= end_date,
         ).all()
@@ -96,6 +101,7 @@ def generate_payroll(data: PayrollGenerate, db: Session = Depends(get_db)):
         bonuses_total = 0
         adjustments = db.query(Adjustment).filter(
             Adjustment.employee_id == emp.id,
+            Adjustment.employee_name == emp.full_name,
             Adjustment.adjustment_date >= start_date,
             Adjustment.adjustment_date <= end_date,
         ).all()

@@ -9,7 +9,7 @@ class Payroll(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False)
-    employee_name = Column(String, nullable=True)
+    employee_name = Column(String(100), nullable=False)
     month = Column(Integer, nullable=False)
     year = Column(Integer, nullable=False)
     total_days = Column(Integer, default=0)
