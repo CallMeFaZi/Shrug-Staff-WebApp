@@ -72,7 +72,6 @@ def generate_payroll(data: PayrollGenerate, db: Session = Depends(get_db)):
 
         attendance_records = db.query(Attendance).filter(
             Attendance.employee_id == emp.id,
-            Attendance.employee_name == emp.full_name,
             Attendance.attendance_date >= start_date,
             Attendance.attendance_date <= end_date,
         ).all()
@@ -101,7 +100,6 @@ def generate_payroll(data: PayrollGenerate, db: Session = Depends(get_db)):
         bonuses_total = 0
         adjustments = db.query(Adjustment).filter(
             Adjustment.employee_id == emp.id,
-            Adjustment.employee_name == emp.full_name,
             Adjustment.adjustment_date >= start_date,
             Adjustment.adjustment_date <= end_date,
         ).all()
