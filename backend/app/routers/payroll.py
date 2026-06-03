@@ -111,38 +111,38 @@ def generate_payroll(data: PayrollGenerate, db: Session = Depends(get_db)):
 
         final_salary = max(0, total_salary - total_deductions)
 
-         if existing:
-             # Update existing record
-             existing.total_days = total_days_in_month
-             existing.present_days = present_days
-             existing.absent_days = absent_days
-             existing.late_days = late_days
-             existing.unpaid_days = unpaid_days
-             existing.total_salary = round(total_salary, 2)
-             existing.deductions = round(total_deductions, 2)
-             existing.final_salary = round(final_salary, 2)
-             # Update employee_name if it changed
-             existing.employee_name = emp.full_name
-             generated.append(existing)
-         else:
-             # Create new record
-             payroll = Payroll(
-                 employee_id=emp.id,
-                 employee_name=emp.full_name,
-                 month=month,
-                 year=year,
-                 total_days=total_days_in_month,
-                 present_days=present_days,
-                 absent_days=absent_days,
-                 late_days=late_days,
-                 unpaid_days=unpaid_days,
-                 total_salary=round(total_salary, 2),
-                 deductions=round(total_deductions, 2),
-                 final_salary=round(final_salary, 2),
-             )
-             db.add(payroll)
-             db.flush()
-             generated.append(payroll)
+        if existing:
+            # Update existing record
+            existing.total_days = total_days_in_month
+            existing.present_days = present_days
+            existing.absent_days = absent_days
+            existing.late_days = late_days
+            existing.unpaid_days = unpaid_days
+            existing.total_salary = round(total_salary, 2)
+            existing.deductions = round(total_deductions, 2)
+            existing.final_salary = round(final_salary, 2)
+            # Update employee_name if it changed
+            existing.employee_name = emp.full_name
+            generated.append(existing)
+        else:
+            # Create new record
+            payroll = Payroll(
+                employee_id=emp.id,
+                employee_name=emp.full_name,
+                month=month,
+                year=year,
+                total_days=total_days_in_month,
+                present_days=present_days,
+                absent_days=absent_days,
+                late_days=late_days,
+                unpaid_days=unpaid_days,
+                total_salary=round(total_salary, 2),
+                deductions=round(total_deductions, 2),
+                final_salary=round(final_salary, 2),
+            )
+            db.add(payroll)
+            db.flush()
+            generated.append(payroll)
 
     log = SystemLog(
         module="payroll",
