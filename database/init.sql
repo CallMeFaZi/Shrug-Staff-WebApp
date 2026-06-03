@@ -49,6 +49,8 @@ CREATE TABLE IF NOT EXISTS attendance (
     status          VARCHAR(20) DEFAULT 'present',
     payment         DECIMAL(12, 2) DEFAULT 0,
     reason          TEXT,
+    late_minutes    DECIMAL(5, 2),
+    late_deduction  DECIMAL(12, 2) DEFAULT 0,
     created_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(employee_id, attendance_date)
 );
@@ -64,6 +66,7 @@ CREATE TABLE IF NOT EXISTS attendance_logs (
 CREATE TABLE IF NOT EXISTS payroll (
     id              SERIAL PRIMARY KEY,
     employee_id     INTEGER REFERENCES employees(id),
+    employee_name   VARCHAR,
     month           INTEGER NOT NULL,
     year            INTEGER NOT NULL,
     total_days      INTEGER DEFAULT 0,
@@ -77,7 +80,15 @@ CREATE TABLE IF NOT EXISTS payroll (
     generated_at    TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(employee_id, month, year)
 );
-
+CREATE TABLE IF NOT EXISTS employee_adjustments (
+    id              SERIAL PRIMARY KEY,
+    employee_id     INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    type            VARCHAR(10) NOT NULL,
+    amount          DECIMAL(12, 2) NOT NULL DEFAULT 0,
+    reason          TEXT NOT NULL,
+    adjustment_date DATE NOT NULL,
+    created_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 CREATE TABLE IF NOT EXISTS system_logs (
     id              SERIAL PRIMARY KEY,
     module          VARCHAR(50) NOT NULL,
@@ -123,3 +134,4 @@ CREATE INDEX IF NOT EXISTS idx_attendance_employee ON attendance(employee_id);
 CREATE INDEX IF NOT EXISTS idx_payroll_month_year ON payroll(month, year);
 CREATE INDEX IF NOT EXISTS idx_system_logs_module ON system_logs(module);
 CREATE INDEX IF NOT EXISTS idx_attendance_logs_employee ON attendance_logs(employee_id);
+CREATE INDEX IF NOT EXISTS idx_employee_adjustments_employee ON employee_adjustments(employee_id);

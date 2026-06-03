@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.database import engine, Base
+from app.db_schema import ensure_database_schema
 from app.routers import (
     recognition_router,
     attendance_router,
@@ -16,8 +16,8 @@ from app.routers import (
     adjustments_router,
 )
 
-# Create all tables
-Base.metadata.create_all(bind=engine)
+# Create/update required database schema
+ensure_database_schema()
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -25,6 +25,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
 
 # CORS
 app.add_middleware(
