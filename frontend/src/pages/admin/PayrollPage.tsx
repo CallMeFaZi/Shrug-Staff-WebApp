@@ -53,7 +53,7 @@ export default function PayrollPage() {
             <tbody className="divide-y divide-gray-700/50">
               {records.map(pr => (
                 <tr key={pr.id} className="hover:bg-white/[0.02]">
-                  <td className="table-cell text-sm">{pr.full_name}</td>
+                  <td className="table-cell text-sm">{pr.employee_name}</td>
                   <td className="table-cell text-sm">{monthNames[pr.month-1]} {pr.year}</td>
                   <td className="table-cell text-sm">{pr.total_days}</td>
                   <td className="table-cell text-sm text-green-400 font-medium">{pr.present_days}</td>
