@@ -50,6 +50,8 @@ def clock_in_employee(
         raise ValueError("Employee not found")
 
     shift = db.query(Shift).filter(Shift.id == employee.shift_id).first()
+    if not shift:
+        raise ValueError("No shift assigned.")
 
     # Default status
     status = "present"
@@ -58,30 +60,58 @@ def clock_in_employee(
     late_deduction = Decimal("0")
     reason = ""
 
-    if shift:
-        grace_minutes = shift.grace_minutes
-        shift_start = shift.start_time
+    # Convert clock_in_time to naive datetime (assuming PKT) for shift comparison
+    clock_local = clock_in_time.replace(tzinfo=None)
+    shift_start = shift.start_time
+    shift_end = shift.end_time
 
-        # Strip timezone for shift comparison (shift times are local, not UTC)
-        clock_local = clock_in_time.replace(tzinfo=None)
-        shift_start_dt = datetime.combine(today, shift_start)
+    # Combine today's date with shift times
+    shift_start_dt = datetime.combine(today, shift_start)
+    shift_end_dt = datetime.combine(today, shift_end)
+    # Handle overnight shift (if shift ends after midnight)
+    if shift_end < shift_start:
+        shift_end_dt += timedelta(days=1)
 
-        if clock_local <= shift_start_dt:
-            # Early or on time
-            status = "present"
+    # Calculate shift duration in minutes
+    shift_duration_minutes = (shift_end_dt - shift_start_dt).total_seconds() / 60
+
+    # Calculate elapsed minutes from shift start to clock-in time
+    elapsed_minutes = (clock_local - shift_start_dt).total_seconds() / 60
+
+    # Shift constraint: employee can only clock in during assigned shift hours
+    # (We assume the shift is valid and clock_in_time is within the shift calendar day)
+    # If clock-in time is before shift start, it's early (allowed).
+    # If clock-in time is after shift end, it's still during shift? Actually, the shift ends at shift_end_dt.
+    # But the business rule says: employees can only clock in during their assigned shift hours.
+    # We'll allow clock-in up to shift end? Actually, the mid-shift cutoff is 50% of shift duration.
+    # We'll check the mid-shift cutoff first.
+
+    # Mid-Shift Cutoff: if clock-in after 50% of shift duration, error
+    if elapsed_minutes > (shift_duration_minutes / 2):
+        raise ValueError("Too many hours passed, can't clock in now.")
+
+    # Grace period and late penalties
+    if clock_local <= shift_start_dt:
+        # Early or on time
+        status = "present"
+        late_minutes = Decimal("0")
+    else:
+        late_minutes_float = (clock_local - shift_start_dt).total_seconds() / 60
+        # Convert to Decimal for storage and reason (three decimal places)
+        late_minutes = Decimal(str(late_minutes_float)).quantize(Decimal("0.001"))
+        # Calculate late deductions and status
+        deduction, is_absent, status = calculate_late_deductions(late_minutes)
+        late_deduction = deduction
+        # Set reason
+        if is_absent:
+            reason = "30+ Mins Late"
         else:
-            late_minutes = (clock_local - shift_start_dt).total_seconds() / 60
-            deduction, is_absent, status = calculate_late_deductions(
-                late_minutes=late_minutes,
-                grace_minutes=grace_minutes,
-            )
-            late_deduction = deduction
-            # Set reason
-            if is_absent:
-                reason = "30 Mins late"
+            # Format late_minutes for display: show at most one decimal place, remove trailing zeros
+            lm_display = late_minutes.quantize(Decimal("0.1"))
+            if lm_display == lm_display.to_integral_value():
+                reason = f"{lm_display:.0f} Mins late"
             else:
-                # Format reason with exact minutes (no decimal places for display)
-                reason = f"{int(late_minutes)} Mins late"
+                reason = f"{lm_display:.1f} Mins late"
 
     # Get hourly rate
     hourly_rate = employee.hourly_rate or Decimal("0")
@@ -152,21 +182,26 @@ def clock_out_employee(
     if employee:
         shift = db.query(Shift).filter(Shift.id == employee.shift_id).first()
 
-    # Apply clock-out time rounding if within 10 minutes of shift end
+    # Apply clock-out time normalization: adjust to shift end if clock-out is 
+    # 10 minutes before shift end or any time after shift end
     final_clock_out_time = clock_out_time
     if shift:
-        shift_end = shift.end_time
-        # Combine today's date with shift end time
-        shift_end_dt = datetime.combine(today, shift_end)
+        # Compute shift start and end datetimes based on the clock-in date
+        shift_start_date = attendance.clock_in.date()
+        shift_start_dt = datetime.combine(shift_start_date, shift.start_time)
+        shift_end_dt = datetime.combine(shift_start_date, shift.end_time)
+        # Handle overnight shift
+        if shift.end_time < shift.start_time:
+            shift_end_dt += timedelta(days=1)
         # Make shift_end_dt timezone-aware to match clock_out_time
         if shift_end_dt.tzinfo is None:
             shift_end_dt = shift_end_dt.replace(tzinfo=clock_out_time.tzinfo)
         
-        # Calculate time difference in minutes
-        time_diff = abs((clock_out_time - shift_end_dt).total_seconds() / 60)
+        # Calculate the earliest time to adjust to shift end: 10 minutes before shift end
+        earliest_adjustment = shift_end_dt - timedelta(minutes=10)
         
-        # If within 10 minutes of shift end, round to shift end time
-        if time_diff <= 10:
+        # If clock-out time is at or after earliest_adjustment, adjust to shift end
+        if clock_out_time >= earliest_adjustment:
             final_clock_out_time = shift_end_dt
 
     attendance.clock_out = final_clock_out_time
