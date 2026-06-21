@@ -27,7 +27,9 @@ def get_setting(db: Session, key: str, default: str = "") -> str:
 def _adjust_clock_in_and_calculate_late_fields(db: Session, employee_id: int, clock_in_time: datetime, attendance_date: date):
     """
     Adjust clock-in time if within grace period and calculate late-related fields.
+    Expects clock_in_time to be timezone-aware (in PKT).
     Returns: (adjusted_clock_in, status, late_minutes, late_deduction, reason)
+    where adjusted_clock_in is timezone-aware (in PKT).
     """
     # Get employee and shift
     employee = db.query(Employee).filter(Employee.id == employee_id).first()
@@ -38,12 +40,19 @@ def _adjust_clock_in_and_calculate_late_fields(db: Session, employee_id: int, cl
     if not shift:
         raise ValueError("No shift assigned.")
 
-    # Convert clock_in_time to naive datetime (assuming PKT) for shift comparison
-    clock_local = clock_in_time.replace(tzinfo=None)
+    # Ensure clock_in_time is in PKT timezone
+    if clock_in_time.tzinfo is None:
+        # If naive, assume it's PKT (should not happen in normal flow)
+        clock_in_time = clock_in_time.replace(tzinfo=PKT)
+    else:
+        clock_in_time = clock_in_time.astimezone(PKT)
+    
+    # Get naive PKT time for calculations
+    clock_local_naive = clock_in_time.replace(tzinfo=None)
     shift_start = shift.start_time
     shift_end = shift.end_time
 
-    # Combine attendance_date with shift times
+    # Combine attendance_date with shift times (naive PKT)
     shift_start_dt = datetime.combine(attendance_date, shift_start)
     shift_end_dt = datetime.combine(attendance_date, shift_end)
     # Handle overnight shift (if shift ends after midnight)
@@ -53,32 +62,32 @@ def _adjust_clock_in_and_calculate_late_fields(db: Session, employee_id: int, cl
     # Calculate shift duration in minutes (for mid-shift cutoff)
     shift_duration_minutes = (shift_end_dt - shift_start_dt).total_seconds() / 60
 
-    # Calculate elapsed minutes from shift start to clock-in time
-    elapsed_minutes = (clock_local - shift_start_dt).total_seconds() / 60
+    # Calculate elapsed minutes from shift start to clock-in time (using naive PKT)
+    elapsed_minutes = (clock_local_naive - shift_start_dt).total_seconds() / 60
 
     # Mid-Shift Cutoff: if clock-in after 50% of shift duration, error
     if elapsed_minutes > (shift_duration_minutes / 2):
         raise ValueError("Too many hours passed, can't clock in now.")
 
     # Determine if we are in the grace period for adjustment: [shift_start_dt, shift_start_dt+15 minutes)
-    if clock_local < shift_start_dt:
+    if clock_local_naive < shift_start_dt:
         # Early: do not adjust clock-in time
-        adjusted_clock_in = clock_local
+        adjusted_clock_in_naive = clock_local_naive
         status = "present"
         late_minutes = Decimal("0")
         late_deduction = Decimal("0")
         reason = ""
-    elif clock_local < shift_start_dt + timedelta(minutes=15):
+    elif clock_local_naive < shift_start_dt + timedelta(minutes=15):
         # In the grace period: adjust to shift start time
-        adjusted_clock_in = shift_start_dt
+        adjusted_clock_in_naive = shift_start_dt
         status = "present"
         late_minutes = Decimal("0")
         late_deduction = Decimal("0")
         reason = ""
     else:
         # Late by 15 minutes or more: do not adjust clock-in time
-        adjusted_clock_in = clock_local
-        late_minutes_float = elapsed_minutes   # because elapsed_minutes is (clock_local - shift_start_dt) in minutes
+        adjusted_clock_in_naive = clock_local_naive
+        late_minutes_float = elapsed_minutes   # because elapsed_minutes is (clock_local_naive - shift_start_dt) in minutes
         late_minutes = Decimal(str(late_minutes_float)).quantize(Decimal("0.001"))
         deduction, is_absent, status = calculate_late_deductions(late_minutes)
         late_deduction = deduction
@@ -90,6 +99,9 @@ def _adjust_clock_in_and_calculate_late_fields(db: Session, employee_id: int, cl
                 reason = f"{lm_display:.0f} Mins late"
             else:
                 reason = f"{lm_display:.1f} Mins late"
+
+    # Convert adjusted clock-in time back to timezone-aware PKT for storage
+    adjusted_clock_in = adjusted_clock_in_naive.replace(tzinfo=PKT)
 
     return adjusted_clock_in, status, late_minutes, late_deduction, reason
 
@@ -133,7 +145,7 @@ def clock_in_employee(
     attendance = Attendance(
         employee_id=employee_id,
         attendance_date=today,
-        clock_in=adjusted_clock_in,
+        clock_in=adjusted_clock_in.astimezone(timezone.utc),
         status=status,
         payment=Decimal("0"),
         reason=reason or status,
@@ -197,7 +209,7 @@ def recalculate_attendance(db: Session, attendance: Attendance) -> Attendance:
         adjusted_clock_in, status, late_minutes, late_deduction, reason = _adjust_clock_in_and_calculate_late_fields(
             db, attendance.employee_id, attendance.clock_in, attendance.attendance_date
         )
-        attendance.clock_in = adjusted_clock_in
+        attendance.clock_in = adjusted_clock_in.astimezone(timezone.utc)
         attendance.status = status
         attendance.late_minutes = late_minutes
         attendance.late_deduction = late_deduction
@@ -233,6 +245,7 @@ def clock_out_employee(
     Calculates total hours and daily pay.
     Supports overnight shifts (clock-in yesterday, clock-out today).
     Rounds clock-out time to shift end time if within 10 minutes.
+    Expects clock_out_time to be timezone-aware (in PKT).
     """
     today = clock_out_time.date()
 
@@ -271,16 +284,25 @@ def clock_out_employee(
     # 10 minutes before shift end or any time after shift end
     final_clock_out_time = clock_out_time
     if shift:
+        # Ensure clock_out_time is in PKT timezone
+        if clock_out_time.tzinfo is None:
+            # If naive, assume it's PKT (should not happen in normal flow)
+            clock_out_time = clock_out_time.replace(tzinfo=PKT)
+        else:
+            clock_out_time = clock_out_time.astimezone(PKT)
+        
         # Compute shift start and end datetimes based on the clock-in date
-        shift_start_date = attendance.clock_in.date()
+        # attendance.clock_in is timezone-aware PKT (after our fix)
+        clock_in_pkt = attendance.clock_in  # timezone-aware PKT
+        shift_start_date = clock_in_pkt.date()
         shift_start_dt = datetime.combine(shift_start_date, shift.start_time)
         shift_end_dt = datetime.combine(shift_start_date, shift.end_time)
         # Handle overnight shift
         if shift.end_time < shift.start_time:
             shift_end_dt += timedelta(days=1)
-        # Make shift_end_dt timezone-aware to match clock_out_time
-        if shift_end_dt.tzinfo is None:
-            shift_end_dt = shift_end_dt.replace(tzinfo=clock_out_time.tzinfo)
+        # Make shift_start_dt and shift_end_dt timezone-aware in PKT
+        shift_start_dt = shift_start_dt.replace(tzinfo=PKT)
+        shift_end_dt = shift_end_dt.replace(tzinfo=PKT)
         
         # Calculate the earliest time to adjust to shift end: 10 minutes before shift end
         earliest_adjustment = shift_end_dt - timedelta(minutes=10)
@@ -289,19 +311,11 @@ def clock_out_employee(
         if clock_out_time >= earliest_adjustment:
             final_clock_out_time = shift_end_dt
 
-    attendance.clock_out = final_clock_out_time
-
-    # Calculate total hours and payment
-    total_hours, payment = _calculate_hours_and_payment(db, attendance)
-    attendance.total_hours = total_hours
-    attendance.payment = payment
-
-
-    # Log
+    attendance.clock_out = final_clock_out_time.astimezone(timezone.utc)
     log = AttendanceLog(
         employee_id=employee_id,
         action="clock_out",
-        details=f"Clocked out at {attendance.clock_out.strftime('%H:%M:%S')}. Hours: {attendance.total_hours}, Pay: {attendance.payment}",
+        details=f"Clocked out at {final_clock_out_time.strftime('%H:%M:%S')}. Hours: {attendance.total_hours}, Pay: {attendance.payment}",
     )
     db.add(log)
 
