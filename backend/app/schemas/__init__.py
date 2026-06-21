@@ -1,4 +1,4 @@
-from .attendance import AttendanceOut, AttendanceUpdate, AdminClockInOut, AdminClockOutOut
+from .attendance import AttendanceOut, AttendanceUpdate, AdminClockInOut, AdminClockOutOut, ClockInOut
 from .employee import EmployeeOut, EmployeeCreate, EmployeeUpdate
 from .recognition import RecognizeResponse
 from .setting import SettingOut, SettingCreate, SettingUpdate
