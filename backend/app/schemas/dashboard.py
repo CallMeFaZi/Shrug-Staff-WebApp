@@ -12,4 +12,4 @@ class DashboardData(BaseModel):
     recent_attendance: List[AttendanceOut]
 
     class Config:
-        orm_mode = True
+        from_attributes = True
