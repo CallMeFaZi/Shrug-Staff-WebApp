@@ -115,6 +115,13 @@ def clock_in_employee(
     if existing:
         raise ValueError("Attendance already recorded for today")
 
+    # Get employee to check active status
+    employee = db.query(Employee).filter(Employee.id == employee_id).first()
+    if not employee:
+        raise ValueError("Employee not found")
+    if not employee.active:
+        raise ValueError("Employee is inactive")
+
     # Use helper to adjust clock-in time and calculate late fields
     adjusted_clock_in, status, late_minutes, late_deduction, reason = _adjust_clock_in_and_calculate_late_fields(
         db, employee_id, clock_in_time, today
@@ -252,6 +259,10 @@ def clock_out_employee(
 
     # Get employee shift for rounding logic
     employee = db.query(Employee).filter(Employee.id == employee_id).first()
+    if not employee:
+        raise ValueError("Employee not found")
+    if not employee.active:
+        raise ValueError("Employee is inactive")
     shift = None
     if employee:
         shift = db.query(Shift).filter(Shift.id == employee.shift_id).first()
@@ -280,29 +291,17 @@ def clock_out_employee(
 
     attendance.clock_out = final_clock_out_time
 
-    # Calculate total hours (using potentially rounded clock-out time)
-    delta = attendance.clock_out - attendance.clock_in
-    total_hours = Decimal(str(delta.total_seconds() / 3600)).quantize(Decimal("0.01"))
+    # Calculate total hours and payment
+    total_hours, payment = _calculate_hours_and_payment(db, attendance)
     attendance.total_hours = total_hours
+    attendance.payment = payment
 
-    # Calculate payment
-    hourly_rate = employee.hourly_rate or Decimal("0")
-    daily_pay = calculate_daily_pay(total_hours, hourly_rate)
-
-    # Apply late deduction if any
-    # For absent employees (30+ mins late), payment should be 0 regardless of hours worked
-    if attendance.status == "absent":
-        daily_pay = Decimal("0")
-    else:
-        daily_pay = max(Decimal("0"), daily_pay - attendance.late_deduction)
-
-    attendance.payment = daily_pay
 
     # Log
     log = AttendanceLog(
         employee_id=employee_id,
         action="clock_out",
-        details=f"Clocked out at {attendance.clock_out.strftime('%H:%M:%S')}. Hours: {total_hours}, Pay: {daily_pay}",
+        details=f"Clocked out at {attendance.clock_out.strftime('%H:%M:%S')}. Hours: {attendance.total_hours}, Pay: {attendance.payment}",
     )
     db.add(log)
 

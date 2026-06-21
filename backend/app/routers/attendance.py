@@ -176,6 +176,10 @@ async def admin_update_attendance(
     if not attendance:
         raise HTTPException(status_code=404, detail="Attendance record not found")
     update_data = attendance_update.dict(exclude_unset=True)
+    if 'clock_in_time' in update_data and update_data['clock_in_time'] is None:
+        raise HTTPException(status_code=400, detail="clock_in_time cannot be None")
+    if 'clock_out_time' in update_data and update_data['clock_out_time'] is None:
+        raise HTTPException(status_code=400, detail="clock_out_time cannot be None")
     for field, value in update_data.items():
         setattr(attendance, field, value)
     from app.services.attendance_rules import recalculate_attendance
