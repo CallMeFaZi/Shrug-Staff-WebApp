@@ -162,7 +162,6 @@ def clock_out_employee(
 
     # Second try: if no record today, check yesterday (overnight shift)
     if not attendance:
-        from datetime import timedelta
         yesterday = today - timedelta(days=1)
         attendance = db.query(Attendance).filter(
             Attendance.employee_id == employee_id,
