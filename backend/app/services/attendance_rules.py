@@ -13,6 +13,7 @@ from app.services.salary_calculator import calculate_daily_pay, calculate_late_d
 
 PKT = timezone(timedelta(hours=5))
 
+
 def now_pkt() -> datetime:
     """Return current Pakistan Standard Time (PKT = UTC+5)."""
     return datetime.now(PKT)
@@ -23,12 +24,12 @@ def get_setting(db: Session, key: str, default: str = "") -> str:
     return setting.value if setting else default
 
 
-def _calculate_late_fields(db: Session, employee_id: int, clock_in_time: datetime, attendance_date: date):
+def _adjust_clock_in_and_calculate_late_fields(db: Session, employee_id: int, clock_in_time: datetime, attendance_date: date):
     """
-    Calculate late-related fields for a given employee and clock-in time.
-    Returns: (status, late_minutes, late_deduction, reason)
+    Adjust clock-in time if within grace period and calculate late-related fields.
+    Returns: (adjusted_clock_in, status, late_minutes, late_deduction, reason)
     """
-    # Get employee shift
+    # Get employee and shift
     employee = db.query(Employee).filter(Employee.id == employee_id).first()
     if not employee:
         raise ValueError("Employee not found")
@@ -37,26 +38,19 @@ def _calculate_late_fields(db: Session, employee_id: int, clock_in_time: datetim
     if not shift:
         raise ValueError("No shift assigned.")
 
-    # Default status
-    status = "present"
-    deduction = Decimal("0")
-    late_minutes = None
-    late_deduction = Decimal("0")
-    reason = ""
-
     # Convert clock_in_time to naive datetime (assuming PKT) for shift comparison
     clock_local = clock_in_time.replace(tzinfo=None)
     shift_start = shift.start_time
     shift_end = shift.end_time
 
-    # Combine today's date with shift times
+    # Combine attendance_date with shift times
     shift_start_dt = datetime.combine(attendance_date, shift_start)
     shift_end_dt = datetime.combine(attendance_date, shift_end)
     # Handle overnight shift (if shift ends after midnight)
     if shift_end < shift_start:
         shift_end_dt += timedelta(days=1)
 
-    # Calculate shift duration in minutes
+    # Calculate shift duration in minutes (for mid-shift cutoff)
     shift_duration_minutes = (shift_end_dt - shift_start_dt).total_seconds() / 60
 
     # Calculate elapsed minutes from shift start to clock-in time
@@ -66,30 +60,92 @@ def _calculate_late_fields(db: Session, employee_id: int, clock_in_time: datetim
     if elapsed_minutes > (shift_duration_minutes / 2):
         raise ValueError("Too many hours passed, can't clock in now.")
 
-    # Grace period and late penalties
-    if clock_local <= shift_start_dt:
-        # Early or on time
+    # Determine if we are in the grace period for adjustment: [shift_start_dt, shift_start_dt+15 minutes)
+    if clock_local < shift_start_dt:
+        # Early: do not adjust clock-in time
+        adjusted_clock_in = clock_local
         status = "present"
         late_minutes = Decimal("0")
+        late_deduction = Decimal("0")
+        reason = ""
+    elif clock_local < shift_start_dt + timedelta(minutes=15):
+        # In the grace period: adjust to shift start time
+        adjusted_clock_in = shift_start_dt
+        status = "present"
+        late_minutes = Decimal("0")
+        late_deduction = Decimal("0")
+        reason = ""
     else:
-        late_minutes_float = (clock_local - shift_start_dt).total_seconds() / 60
-        # Convert to Decimal for storage and reason (three decimal places)
+        # Late by 15 minutes or more: do not adjust clock-in time
+        adjusted_clock_in = clock_local
+        late_minutes_float = elapsed_minutes   # because elapsed_minutes is (clock_local - shift_start_dt) in minutes
         late_minutes = Decimal(str(late_minutes_float)).quantize(Decimal("0.001"))
-        # Calculate late deductions and status
         deduction, is_absent, status = calculate_late_deductions(late_minutes)
         late_deduction = deduction
-        # Set reason
         if is_absent:
             reason = "30+ Mins Late"
         else:
-            # Format late_minutes for display: show at most one decimal place, remove trailing zeros
             lm_display = late_minutes.quantize(Decimal("0.1"))
             if lm_display == lm_display.to_integral_value():
                 reason = f"{lm_display:.0f} Mins late"
             else:
                 reason = f"{lm_display:.1f} Mins late"
 
-    return status, late_minutes, late_deduction, reason
+    return adjusted_clock_in, status, late_minutes, late_deduction, reason
+
+
+def clock_in_employee(
+    db: Session,
+    employee_id: int,
+    clock_in_time: datetime,
+    reason: str = None,
+) -> Attendance:
+    """
+    Record clock-in for an employee.
+    Applies late attendance rules.
+    """
+    today = clock_in_time.date()
+
+    # Check for duplicate attendance
+    existing = db.query(Attendance).filter(
+        Attendance.employee_id == employee_id,
+        Attendance.attendance_date == today,
+    ).first()
+
+    if existing:
+        raise ValueError("Attendance already recorded for today")
+
+    # Use helper to adjust clock-in time and calculate late fields
+    adjusted_clock_in, status, late_minutes, late_deduction, reason = _adjust_clock_in_and_calculate_late_fields(
+        db, employee_id, clock_in_time, today
+    )
+
+    # Get hourly rate
+    hourly_rate = employee.hourly_rate or Decimal("0")
+
+    attendance = Attendance(
+        employee_id=employee_id,
+        attendance_date=today,
+        clock_in=adjusted_clock_in,
+        status=status,
+        payment=Decimal("0"),
+        reason=reason or status,
+        late_minutes=late_minutes,  # Store exact value (can be fractional)
+        late_deduction=late_deduction,
+    )
+
+    db.add(attendance)
+    db.flush()
+
+    # Log
+    log = AttendanceLog(
+        employee_id=employee_id,
+        action="clock_in",
+        details=f"Clocked in at {clock_in_time.strftime('%H:%M:%S')}. Status: {status}",
+    )
+    db.add(log)
+
+    return attendance
 
 
 def _calculate_hours_and_payment(db: Session, attendance: Attendance):
@@ -130,10 +186,11 @@ def recalculate_attendance(db: Session, attendance: Attendance) -> Attendance:
     Updates the record's status, late_minutes, late_deduction, reason, total_hours, and payment.
     """
     if attendance.clock_in is not None:
-        # Recalculate late-related fields
-        status, late_minutes, late_deduction, reason = _calculate_late_fields(
+        # Recalculate late-related fields and adjust clock-in time if in grace period
+        adjusted_clock_in, status, late_minutes, late_deduction, reason = _adjust_clock_in_and_calculate_late_fields(
             db, attendance.employee_id, attendance.clock_in, attendance.attendance_date
         )
+        attendance.clock_in = adjusted_clock_in
         attendance.status = status
         attendance.late_minutes = late_minutes
         attendance.late_deduction = late_deduction
@@ -146,135 +203,15 @@ def recalculate_attendance(db: Session, attendance: Attendance) -> Attendance:
         attendance.payment = payment
     else:
         # If we don't have both times, we cannot calculate hours and payment from clock-in/out.
-        # But we might have updated only one of them. We'll leave total_hours and payment as is?
-        # However, if we updated clock_in and the status changed to absent, we should set payment to 0.
+        # However, if the status is absent, payment should be 0.
         if attendance.status == "absent":
             attendance.payment = Decimal("0")
-        # If we updated clock_out and we already have clock_in, we would have calculated above.
         # If we only have clock_out and not clock_in, we cannot calculate hours.
         pass
 
     # Ensure payment is 0 if absent (overwrite)
     if attendance.status == "absent":
         attendance.payment = Decimal("0")
-
-    return attendance
-
-
-def clock_in_employee(
-    db: Session,
-    employee_id: int,
-    clock_in_time: datetime,
-    reason: str = None,
-) -> Attendance:
-    """
-    Record clock-in for an employee.
-    Applies late attendance rules.
-    """
-    today = clock_in_time.date()
-
-    # Check for duplicate attendance
-    existing = db.query(Attendance).filter(
-        Attendance.employee_id == employee_id,
-        Attendance.attendance_date == today,
-    ).first()
-
-    if existing:
-        raise ValueError("Attendance already recorded for today")
-
-    # Get employee shift
-    employee = db.query(Employee).filter(Employee.id == employee_id).first()
-    if not employee:
-        raise ValueError("Employee not found")
-
-    shift = db.query(Shift).filter(Shift.id == employee.shift_id).first()
-    if not shift:
-        raise ValueError("No shift assigned.")
-
-    # Default status
-    status = "present"
-    deduction = Decimal("0")
-    late_minutes = None
-    late_deduction = Decimal("0")
-    reason = ""
-
-    # Convert clock_in_time to naive datetime (assuming PKT) for shift comparison
-    clock_local = clock_in_time.replace(tzinfo=None)
-    shift_start = shift.start_time
-    shift_end = shift.end_time
-
-    # Combine today's date with shift times
-    shift_start_dt = datetime.combine(today, shift_start)
-    shift_end_dt = datetime.combine(today, shift_end)
-    # Handle overnight shift (if shift ends after midnight)
-    if shift_end < shift_start:
-        shift_end_dt += timedelta(days=1)
-
-    # Calculate shift duration in minutes
-    shift_duration_minutes = (shift_end_dt - shift_start_dt).total_seconds() / 60
-
-    # Calculate elapsed minutes from shift start to clock-in time
-    elapsed_minutes = (clock_local - shift_start_dt).total_seconds() / 60
-
-    # Shift constraint: employee can only clock in during assigned shift hours
-    # (We assume the shift is valid and clock_in_time is within the shift calendar day)
-    # If clock-in time is before shift start, it's early (allowed).
-    # If clock-in time is after shift end, it's still during shift? Actually, the shift ends at shift_end_dt.
-    # But the business rule says: employees can only clock in during their assigned shift hours.
-    # We'll allow clock-in up to shift end? Actually, the mid-shift cutoff is 50% of shift duration.
-    # We'll check the mid-shift cutoff first.
-
-    # Mid-Shift Cutoff: if clock-in after 50% of shift duration, error
-    if elapsed_minutes > (shift_duration_minutes / 2):
-        raise ValueError("Too many hours passed, can't clock in now.")
-
-    # Grace period and late penalties
-    if clock_local <= shift_start_dt:
-        # Early or on time
-        status = "present"
-        late_minutes = Decimal("0")
-    else:
-        late_minutes_float = (clock_local - shift_start_dt).total_seconds() / 60
-        # Convert to Decimal for storage and reason (three decimal places)
-        late_minutes = Decimal(str(late_minutes_float)).quantize(Decimal("0.001"))
-        # Calculate late deductions and status
-        deduction, is_absent, status = calculate_late_deductions(late_minutes)
-        late_deduction = deduction
-        # Set reason
-        if is_absent:
-            reason = "30+ Mins Late"
-        else:
-            # Format late_minutes for display: show at most one decimal place, remove trailing zeros
-            lm_display = late_minutes.quantize(Decimal("0.1"))
-            if lm_display == lm_display.to_integral_value():
-                reason = f"{lm_display:.0f} Mins late"
-            else:
-                reason = f"{lm_display:.1f} Mins late"
-
-    # Get hourly rate
-    hourly_rate = employee.hourly_rate or Decimal("0")
-
-    attendance = Attendance(
-        employee_id=employee_id,
-        attendance_date=today,
-        clock_in=clock_in_time,
-        status=status,
-        payment=Decimal("0"),
-        reason=reason or status,
-        late_minutes=late_minutes,  # Store exact value (can be fractional)
-        late_deduction=late_deduction,
-    )
-
-    db.add(attendance)
-    db.flush()
-
-    # Log
-    log = AttendanceLog(
-        employee_id=employee_id,
-        action="clock_in",
-        details=f"Clocked in at {clock_in_time.strftime('%H:%M:%S')}. Status: {status}",
-    )
-    db.add(log)
 
     return attendance
 

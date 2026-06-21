@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 
 class ClockInOut(BaseModel):
@@ -20,7 +20,7 @@ class AttendanceUpdate(BaseModel):
 class AttendanceOut(BaseModel):
     id: int
     employee_id: int
-    attendance_date: datetime
+    attendance_date: date
     clock_in: Optional[datetime] = None
     clock_out: Optional[datetime] = None
     total_hours: Optional[float] = None
