@@ -23,6 +23,144 @@ def get_setting(db: Session, key: str, default: str = "") -> str:
     return setting.value if setting else default
 
 
+def _calculate_late_fields(db: Session, employee_id: int, clock_in_time: datetime, attendance_date: date):
+    """
+    Calculate late-related fields for a given employee and clock-in time.
+    Returns: (status, late_minutes, late_deduction, reason)
+    """
+    # Get employee shift
+    employee = db.query(Employee).filter(Employee.id == employee_id).first()
+    if not employee:
+        raise ValueError("Employee not found")
+
+    shift = db.query(Shift).filter(Shift.id == employee.shift_id).first()
+    if not shift:
+        raise ValueError("No shift assigned.")
+
+    # Default status
+    status = "present"
+    deduction = Decimal("0")
+    late_minutes = None
+    late_deduction = Decimal("0")
+    reason = ""
+
+    # Convert clock_in_time to naive datetime (assuming PKT) for shift comparison
+    clock_local = clock_in_time.replace(tzinfo=None)
+    shift_start = shift.start_time
+    shift_end = shift.end_time
+
+    # Combine today's date with shift times
+    shift_start_dt = datetime.combine(attendance_date, shift_start)
+    shift_end_dt = datetime.combine(attendance_date, shift_end)
+    # Handle overnight shift (if shift ends after midnight)
+    if shift_end < shift_start:
+        shift_end_dt += timedelta(days=1)
+
+    # Calculate shift duration in minutes
+    shift_duration_minutes = (shift_end_dt - shift_start_dt).total_seconds() / 60
+
+    # Calculate elapsed minutes from shift start to clock-in time
+    elapsed_minutes = (clock_local - shift_start_dt).total_seconds() / 60
+
+    # Mid-Shift Cutoff: if clock-in after 50% of shift duration, error
+    if elapsed_minutes > (shift_duration_minutes / 2):
+        raise ValueError("Too many hours passed, can't clock in now.")
+
+    # Grace period and late penalties
+    if clock_local <= shift_start_dt:
+        # Early or on time
+        status = "present"
+        late_minutes = Decimal("0")
+    else:
+        late_minutes_float = (clock_local - shift_start_dt).total_seconds() / 60
+        # Convert to Decimal for storage and reason (three decimal places)
+        late_minutes = Decimal(str(late_minutes_float)).quantize(Decimal("0.001"))
+        # Calculate late deductions and status
+        deduction, is_absent, status = calculate_late_deductions(late_minutes)
+        late_deduction = deduction
+        # Set reason
+        if is_absent:
+            reason = "30+ Mins Late"
+        else:
+            # Format late_minutes for display: show at most one decimal place, remove trailing zeros
+            lm_display = late_minutes.quantize(Decimal("0.1"))
+            if lm_display == lm_display.to_integral_value():
+                reason = f"{lm_display:.0f} Mins late"
+            else:
+                reason = f"{lm_display:.1f} Mins late"
+
+    return status, late_minutes, late_deduction, reason
+
+
+def _calculate_hours_and_payment(db: Session, attendance: Attendance):
+    """
+    Calculate total hours and payment for an attendance record.
+    Returns: (total_hours, payment)
+    """
+    # Get employee
+    employee = db.query(Employee).filter(Employee.id == attendance.employee_id).first()
+    if not employee:
+        raise ValueError("Employee not found")
+
+    # Calculate total hours (using potentially rounded clock-out time)
+    if attendance.clock_in is None or attendance.clock_out is None:
+        # Cannot calculate hours without both times
+        return Decimal("0"), Decimal("0")
+
+    delta = attendance.clock_out - attendance.clock_in
+    total_hours = Decimal(str(delta.total_seconds() / 3600)).quantize(Decimal("0.01"))
+
+    # Calculate payment
+    hourly_rate = employee.hourly_rate or Decimal("0")
+    daily_pay = calculate_daily_pay(total_hours, hourly_rate)
+
+    # Apply late deduction if any
+    # For absent employees (30+ mins late), payment should be 0 regardless of hours worked
+    if attendance.status == "absent":
+        daily_pay = Decimal("0")
+    else:
+        daily_pay = max(Decimal("0"), daily_pay - attendance.late_deduction)
+
+    return total_hours, daily_pay
+
+
+def recalculate_attendance(db: Session, attendance: Attendance) -> Attendance:
+    """
+    Recalculate an attendance record based on its clock_in and clock_out times.
+    Updates the record's status, late_minutes, late_deduction, reason, total_hours, and payment.
+    """
+    if attendance.clock_in is not None:
+        # Recalculate late-related fields
+        status, late_minutes, late_deduction, reason = _calculate_late_fields(
+            db, attendance.employee_id, attendance.clock_in, attendance.attendance_date
+        )
+        attendance.status = status
+        attendance.late_minutes = late_minutes
+        attendance.late_deduction = late_deduction
+        attendance.reason = reason
+
+    if attendance.clock_in is not None and attendance.clock_out is not None:
+        # Recalculate total hours and payment
+        total_hours, payment = _calculate_hours_and_payment(db, attendance)
+        attendance.total_hours = total_hours
+        attendance.payment = payment
+    else:
+        # If we don't have both times, we cannot calculate hours and payment from clock-in/out.
+        # But we might have updated only one of them. We'll leave total_hours and payment as is?
+        # However, if we updated clock_in and the status changed to absent, we should set payment to 0.
+        if attendance.status == "absent":
+            attendance.payment = Decimal("0")
+        # If we updated clock_out and we already have clock_in, we would have calculated above.
+        # If we only have clock_out and not clock_in, we cannot calculate hours.
+        pass
+
+    # Ensure payment is 0 if absent (overwrite)
+    if attendance.status == "absent":
+        attendance.payment = Decimal("0")
+
+    return attendance
+
+
 def clock_in_employee(
     db: Session,
     employee_id: int,

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.attendance import Attendance
 from app.models.employee import Employee
-from app.schemas import AttendanceOut
+from app.schemas import AttendanceOut, AdminClockInOut, AdminClockOutOut, AttendanceUpdate
 from app.services.attendance_rules import clock_in_employee, clock_out_employee
 from app.routers.admin_auth import require_admin
 
@@ -128,3 +128,58 @@ def today_attendance_admin(
         Attendance.attendance_date == today,
     ).order_by(Attendance.clock_in.desc()).all()
     return records
+
+
+@router.post("/admin/attendance/{employee_id}/clock-in", response_model=AttendanceOut)
+async def admin_clock_in_employee(
+    employee_id: int,
+    clock_in_time: Optional[datetime] = None,
+    db: Session = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+):
+    """Admin: clock in an employee by employee_id with optional time."""
+    if clock_in_time is None:
+        clock_in_time = datetime.now(PKT)
+    from app.services.attendance_rules import clock_in_employee
+    attendance = clock_in_employee(db, employee_id=employee_id, clock_in_time=clock_in_time)
+    db.commit()
+    db.refresh(attendance)
+    return attendance
+
+
+@router.post("/admin/attendance/{employee_id}/clock-out", response_model=AttendanceOut)
+async def admin_clock_out_employee(
+    employee_id: int,
+    clock_out_time: Optional[datetime] = None,
+    db: Session = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+):
+    """Admin: clock out an employee by employee_id with optional time."""
+    if clock_out_time is None:
+        clock_out_time = datetime.now(PKT)
+    from app.services.attendance_rules import clock_out_employee
+    attendance = clock_out_employee(db, employee_id=employee_id, clock_out_time=clock_out_time)
+    db.commit()
+    db.refresh(attendance)
+    return attendance
+
+
+@router.patch("/admin/attendance/{attendance_id}", response_model=AttendanceOut)
+async def admin_update_attendance(
+    attendance_id: int,
+    attendance_update: AttendanceUpdate,
+    db: Session = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+):
+    """Admin: update an attendance record by ID and recalculate fields."""
+    attendance = db.query(Attendance).filter(Attendance.id == attendance_id).first()
+    if not attendance:
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+    update_data = attendance_update.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(attendance, field, value)
+    from app.services.attendance_rules import recalculate_attendance
+    attendance = recalculate_attendance(db, attendance)
+    db.commit()
+    db.refresh(attendance)
+    return attendance
