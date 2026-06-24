@@ -27,7 +27,7 @@ export default function PayrollPage() {
       const res = await payrollApi.generate(month, year);
       toast.success(`Generated for ${res.length} employees`);
       loadPayroll();
-    } catch (err: any) { toast.error(err.response?.data?.detail || 'Failed'); }
+    } catch (err: any) { toast.error(err?.response?.data?.detail || 'Failed'); }
     finally { setGenerating(false); }
   };
 

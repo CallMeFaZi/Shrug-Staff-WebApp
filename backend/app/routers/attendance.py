@@ -133,7 +133,7 @@ def today_attendance_admin(
 @router.post("/admin/attendance/{employee_id}/clock-in", response_model=AttendanceOut)
 async def admin_clock_in_employee(
     employee_id: int,
-    clock_in_time: Optional[datetime] = None,
+    clock_in_time: Optional[datetime] = Query(None),
     db: Session = Depends(get_db),
     _admin: bool = Depends(require_admin),
 ):
@@ -150,7 +150,7 @@ async def admin_clock_in_employee(
 @router.post("/admin/attendance/{employee_id}/clock-out", response_model=AttendanceOut)
 async def admin_clock_out_employee(
     employee_id: int,
-    clock_out_time: Optional[datetime] = None,
+    clock_out_time: Optional[datetime] = Query(None),
     db: Session = Depends(get_db),
     _admin: bool = Depends(require_admin),
 ):
@@ -176,12 +176,14 @@ async def admin_update_attendance(
     if not attendance:
         raise HTTPException(status_code=404, detail="Attendance record not found")
     update_data = attendance_update.model_dump(exclude_unset=True)
-    if 'clock_in_time' in update_data and update_data['clock_in_time'] is None:
-        raise HTTPException(status_code=400, detail="clock_in_time cannot be None")
-    if 'clock_out_time' in update_data and update_data['clock_out_time'] is None:
-        raise HTTPException(status_code=400, detail="clock_out_time cannot be None")
-    for field, value in update_data.items():
-        setattr(attendance, field, value)
+    # Map schema field names to model field names
+    field_mapping = {
+        'clock_in_time': 'clock_in',
+        'clock_out_time': 'clock_out',
+    }
+    for schema_field, model_field in field_mapping.items():
+        if schema_field in update_data:
+            setattr(attendance, model_field, update_data[schema_field])
     from app.services.attendance_rules import recalculate_attendance
     attendance = recalculate_attendance(db, attendance)
     db.commit()

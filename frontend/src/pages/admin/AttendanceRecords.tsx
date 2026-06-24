@@ -1,18 +1,22 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
-import { adminAttendanceApi } from '../../api/client';
-import type { Attendance } from '../../types';
+import { adminAttendanceApi, employeesApi } from '../../api/client';
+import type { Attendance, Employee } from '../../types';
 
 export default function AttendanceRecords() {
   const [records, setRecords] = useState<Attendance[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [actionLoading, setActionLoading] = useState<Record<number, boolean>>({});
   const [editingRecord, setEditingRecord] = useState<Attendance | null>(null);
   const [editClockIn, setEditClockIn] = useState('');
   const [editClockOut, setEditClockOut] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState<number | null>(null);
+  const [addClockIn, setAddClockIn] = useState('');
 
-  useEffect(() => { loadRecords(); }, []);
+  useEffect(() => { loadRecords(); loadEmployees(); }, []);
 
   const loadRecords = async () => {
     try {
@@ -20,6 +24,13 @@ export default function AttendanceRecords() {
       setRecords(Array.isArray(res) ? res : []);
     } catch { toast.error('Failed to load attendance'); }
     finally { setLoading(false); }
+  };
+
+  const loadEmployees = async () => {
+    try {
+      const res = await employeesApi.list({ active: true });
+      setEmployees(Array.isArray(res) ? res : []);
+    } catch { /* ignore */ }
   };
 
   const handleClockIn = async (employeeId: number) => {
@@ -78,13 +89,41 @@ export default function AttendanceRecords() {
     }
   };
 
+  const handleAddRecord = async () => {
+    if (!selectedEmployee || !addClockIn) {
+      toast.error('Select employee and time');
+      return;
+    }
+    setActionLoading(prev => ({ ...prev, ['add']: true }));
+    try {
+      await adminAttendanceApi.clockIn(selectedEmployee, addClockIn);
+      toast.success('Record added');
+      setShowAddModal(false);
+      setSelectedEmployee(null);
+      setAddClockIn('');
+      loadRecords();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Failed to add record');
+    } finally {
+      setActionLoading(prev => ({ ...prev, ['add']: false }));
+    }
+  };
+
   const filteredRecords = filter ? records.filter(r => r.status === filter) : records;
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-500">Loading...</div>;
 
   return (
     <div className="page-enter">
-      <h1 className="text-xl sm:text-2xl font-bold text-white mb-5">Attendance Records</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+        <h1 className="text-xl sm:text-2xl font-bold text-white">Attendance Records</h1>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="btn-primary text-sm whitespace-nowrap"
+        >
+          + Add Record
+        </button>
+      </div>
 
       <div className="flex gap-2 mb-5 flex-wrap">
         {['', 'present', 'late', 'absent', 'incomplete'].map(s => (
@@ -162,6 +201,53 @@ export default function AttendanceRecords() {
           </table>
         </div>
       </div>
+
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-[#1e293b] rounded-xl p-6 w-96 max-w-full">
+            <h3 className="text-lg font-bold text-white mb-4">Add Attendance Record</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Employee</label>
+                <select
+                  value={selectedEmployee || ''}
+                  onChange={e => setSelectedEmployee(parseInt(e.target.value) || null)}
+                  className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded text-white"
+                >
+                  <option value="">Select employee</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>{emp.full_name} ({emp.employee_code})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Clock In Time</label>
+                <input
+                  type="datetime-local"
+                  value={addClockIn}
+                  onChange={e => setAddClockIn(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded text-white"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={handleAddRecord}
+                  disabled={actionLoading['add']}
+                  className="flex-1 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
+                >
+                  Add
+                </button>
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {editingRecord && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
