@@ -30,6 +30,8 @@ class AttendanceOut(BaseModel):
     late_minutes: Optional[float] = None
     late_deduction: Optional[float] = None
     created_at: datetime
+    employee_name: Optional[str] = None
+    employee_code: Optional[str] = None
 
     class Config:
         from_attributes = True
