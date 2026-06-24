@@ -183,7 +183,11 @@ async def admin_update_attendance(
     }
     for schema_field, model_field in field_mapping.items():
         if schema_field in update_data:
-            setattr(attendance, model_field, update_data[schema_field])
+            value = update_data[schema_field]
+            # Convert ISO string to datetime for datetime fields
+            if isinstance(value, str):
+                value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            setattr(attendance, model_field, value)
     from app.services.attendance_rules import recalculate_attendance
     attendance = recalculate_attendance(db, attendance)
     db.commit()

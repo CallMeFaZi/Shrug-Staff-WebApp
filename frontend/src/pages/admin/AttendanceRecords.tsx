@@ -94,9 +94,21 @@ export default function AttendanceRecords() {
     if (!editingRecord) return;
     setActionLoading(prev => ({ ...prev, [editingRecord.id]: true }));
     try {
-      const updateData: { clock_in_time?: string; clock_out_time?: string } = {};
-      if (editClockIn) updateData.clock_in_time = localToUtcISOString(editClockIn);
-      if (editClockOut) updateData.clock_out_time = localToUtcISOString(editClockOut);
+      // Always include both fields - empty/null means clear the value
+      const updateData: { clock_in_time?: string | null; clock_out_time?: string | null } = {};
+      if (editClockIn) {
+        updateData.clock_in_time = localToUtcISOString(editClockIn);
+      }
+      if (editClockOut) {
+        updateData.clock_out_time = localToUtcISOString(editClockOut);
+      }
+      // If fields were cleared (empty string), send null to clear the DB value
+      if (editClockIn === '') {
+        updateData.clock_in_time = null;
+      }
+      if (editClockOut === '') {
+        updateData.clock_out_time = null;
+      }
       await adminAttendanceApi.update(editingRecord.id, updateData);
       toast.success('Attendance updated');
       closeEditModal();
