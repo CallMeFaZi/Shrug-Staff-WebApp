@@ -3,6 +3,25 @@ import toast from 'react-hot-toast';
 import { adminAttendanceApi, employeesApi } from '../../api/client';
 import type { Attendance, Employee } from '../../types';
 
+function toLocalDatetimeString(isoString: string | null): string {
+  if (!isoString) return '';
+  const date = new Date(isoString);
+  // Convert UTC to local time for datetime-local input
+  const tzOffset = date.getTimezoneOffset() * 60000;
+  const localDate = new Date(date.getTime() - tzOffset);
+  return localDate.toISOString().slice(0, 16);
+}
+
+function localToUtcISOString(localString: string): string {
+  // datetime-local format is YYYY-MM-DDTHH:MM (local time)
+  // Parse as local time and return ISO string
+  const [datePart, timePart] = localString.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour, minute] = timePart.split(':').map(Number);
+  const date = new Date(year, month - 1, day, hour, minute);
+  return date.toISOString();
+}
+
 export default function AttendanceRecords() {
   const [records, setRecords] = useState<Attendance[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -61,8 +80,8 @@ export default function AttendanceRecords() {
 
   const openEditModal = (record: Attendance) => {
     setEditingRecord(record);
-    setEditClockIn(record.clock_in ? new Date(record.clock_in).toISOString().slice(0, 16) : '');
-    setEditClockOut(record.clock_out ? new Date(record.clock_out).toISOString().slice(0, 16) : '');
+    setEditClockIn(toLocalDatetimeString(record.clock_in));
+    setEditClockOut(toLocalDatetimeString(record.clock_out));
   };
 
   const closeEditModal = () => {
@@ -76,8 +95,8 @@ export default function AttendanceRecords() {
     setActionLoading(prev => ({ ...prev, [editingRecord.id]: true }));
     try {
       const updateData: { clock_in_time?: string; clock_out_time?: string } = {};
-      if (editClockIn) updateData.clock_in_time = new Date(editClockIn).toISOString();
-      if (editClockOut) updateData.clock_out_time = new Date(editClockOut).toISOString();
+      if (editClockIn) updateData.clock_in_time = localToUtcISOString(editClockIn);
+      if (editClockOut) updateData.clock_out_time = localToUtcISOString(editClockOut);
       await adminAttendanceApi.update(editingRecord.id, updateData);
       toast.success('Attendance updated');
       closeEditModal();
@@ -96,7 +115,7 @@ export default function AttendanceRecords() {
     }
     setActionLoading(prev => ({ ...prev, ['add']: true }));
     try {
-      await adminAttendanceApi.clockIn(selectedEmployee, addClockIn);
+      await adminAttendanceApi.clockIn(selectedEmployee, localToUtcISOString(addClockIn));
       toast.success('Record added');
       setShowAddModal(false);
       setSelectedEmployee(null);

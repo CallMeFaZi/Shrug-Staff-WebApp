@@ -51,7 +51,6 @@ def generate_payroll(data: PayrollGenerate, db: Session = Depends(get_db)):
         # Check if payroll already exists - UPDATE instead of skip
         existing = db.query(Payroll).filter(
             Payroll.employee_id == emp.id,
-            Payroll.employee_name == emp.full_name,
             Payroll.month == month,
             Payroll.year == year,
         ).first()
