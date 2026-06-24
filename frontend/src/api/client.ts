@@ -111,6 +111,16 @@ export const adminAttendanceApi = {
   list: (params?: any) =>
     api.get('/admin/attendance', { params }).then((r) => r.data),
   getToday: () => api.get('/admin/attendance/today').then((r) => r.data),
+  clockIn: (employeeId: number, clock_in_time?: string) =>
+    api.post(`/admin/attendance/${employeeId}/clock-in`, null, {
+      params: { clock_in_time },
+    }).then((r) => r.data),
+  clockOut: (employeeId: number, clock_out_time?: string) =>
+    api.post(`/admin/attendance/${employeeId}/clock-out`, null, {
+      params: { clock_out_time },
+    }).then((r) => r.data),
+  update: (attendanceId: number, data: { clock_in_time?: string; clock_out_time?: string }) =>
+    api.patch(`/admin/attendance/${attendanceId}`, data).then((r) => r.data),
 };
 
 // ============== Payroll ==============

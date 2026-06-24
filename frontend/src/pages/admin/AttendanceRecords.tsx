@@ -7,6 +7,10 @@ export default function AttendanceRecords() {
   const [records, setRecords] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
+  const [actionLoading, setActionLoading] = useState<Record<number, boolean>>({});
+  const [editingRecord, setEditingRecord] = useState<Attendance | null>(null);
+  const [editClockIn, setEditClockIn] = useState('');
+  const [editClockOut, setEditClockOut] = useState('');
 
   useEffect(() => { loadRecords(); }, []);
 
@@ -16,6 +20,62 @@ export default function AttendanceRecords() {
       setRecords(Array.isArray(res) ? res : []);
     } catch { toast.error('Failed to load attendance'); }
     finally { setLoading(false); }
+  };
+
+  const handleClockIn = async (employeeId: number) => {
+    setActionLoading(prev => ({ ...prev, [employeeId]: true }));
+    try {
+      await adminAttendanceApi.clockIn(employeeId);
+      toast.success('Employee clocked in');
+      loadRecords();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Failed to clock in');
+    } finally {
+      setActionLoading(prev => ({ ...prev, [employeeId]: false }));
+    }
+  };
+
+  const handleClockOut = async (employeeId: number) => {
+    setActionLoading(prev => ({ ...prev, [employeeId]: true }));
+    try {
+      await adminAttendanceApi.clockOut(employeeId);
+      toast.success('Employee clocked out');
+      loadRecords();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Failed to clock out');
+    } finally {
+      setActionLoading(prev => ({ ...prev, [employeeId]: false }));
+    }
+  };
+
+  const openEditModal = (record: Attendance) => {
+    setEditingRecord(record);
+    setEditClockIn(record.clock_in ? new Date(record.clock_in).toISOString().slice(0, 16) : '');
+    setEditClockOut(record.clock_out ? new Date(record.clock_out).toISOString().slice(0, 16) : '');
+  };
+
+  const closeEditModal = () => {
+    setEditingRecord(null);
+    setEditClockIn('');
+    setEditClockOut('');
+  };
+
+  const handleUpdate = async () => {
+    if (!editingRecord) return;
+    setActionLoading(prev => ({ ...prev, [editingRecord.id]: true }));
+    try {
+      const updateData: { clock_in_time?: string; clock_out_time?: string } = {};
+      if (editClockIn) updateData.clock_in_time = new Date(editClockIn).toISOString();
+      if (editClockOut) updateData.clock_out_time = new Date(editClockOut).toISOString();
+      await adminAttendanceApi.update(editingRecord.id, updateData);
+      toast.success('Attendance updated');
+      closeEditModal();
+      loadRecords();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Failed to update');
+    } finally {
+      setActionLoading(prev => ({ ...prev, [editingRecord.id]: false }));
+    }
   };
 
   const filteredRecords = filter ? records.filter(r => r.status === filter) : records;
@@ -36,9 +96,18 @@ export default function AttendanceRecords() {
 
       <div className="bg-[#1e293b] rounded-2xl border border-gray-700/50 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[700px]">
+          <table className="w-full min-w-[1000px]">
             <thead>
-              <tr><th className="table-header">Employee</th><th className="table-header">Date</th><th className="table-header">In</th><th className="table-header">Out</th><th className="table-header">Hours</th><th className="table-header">Status</th><th className="table-header">Pay</th></tr>
+              <tr>
+                <th className="table-header">Employee</th>
+                <th className="table-header">Date</th>
+                <th className="table-header">In</th>
+                <th className="table-header">Out</th>
+                <th className="table-header">Hours</th>
+                <th className="table-header">Status</th>
+                <th className="table-header">Pay</th>
+                <th className="table-header">Actions</th>
+              </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/50">
               {filteredRecords.map(r => (
@@ -57,6 +126,35 @@ export default function AttendanceRecords() {
                     }`}>{r.status}</span>
                   </td>
                   <td className="table-cell text-sm">{r.payment} PKR</td>
+                  <td className="table-cell text-sm">
+                    <div className="flex gap-1 items-center">
+                      {!r.clock_in && (
+                        <button
+                          onClick={() => handleClockIn(r.employee_id)}
+                          disabled={actionLoading[r.employee_id]}
+                          className="px-2 py-1 bg-green-500/20 text-green-400 rounded hover:bg-green-500/30 disabled:opacity-50 transition-colors"
+                        >
+                          Clock In
+                        </button>
+                      )}
+                      {r.clock_in && !r.clock_out && (
+                        <button
+                          onClick={() => handleClockOut(r.employee_id)}
+                          disabled={actionLoading[r.employee_id]}
+                          className="px-2 py-1 bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 disabled:opacity-50 transition-colors"
+                        >
+                          Clock Out
+                        </button>
+                      )}
+                      <button
+                        onClick={() => openEditModal(r)}
+                        disabled={actionLoading[r.id]}
+                        className="px-2 py-1 bg-gray-500/20 text-gray-300 rounded hover:bg-gray-500/30 disabled:opacity-50 transition-colors"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {filteredRecords.length === 0 && <tr><td colSpan={8} className="text-center py-10 text-gray-500 text-sm">No records</td></tr>}
@@ -64,6 +162,49 @@ export default function AttendanceRecords() {
           </table>
         </div>
       </div>
+
+      {editingRecord && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-[#1e293b] rounded-xl p-6 w-96 max-w-full">
+            <h3 className="text-lg font-bold text-white mb-4">Edit Attendance</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Clock In</label>
+                <input
+                  type="datetime-local"
+                  value={editClockIn}
+                  onChange={e => setEditClockIn(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Clock Out</label>
+                <input
+                  type="datetime-local"
+                  value={editClockOut}
+                  onChange={e => setEditClockOut(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-700/50 border border-gray-600 rounded text-white"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={handleUpdate}
+                  disabled={actionLoading[editingRecord.id]}
+                  className="flex-1 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={closeEditModal}
+                  className="flex-1 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
