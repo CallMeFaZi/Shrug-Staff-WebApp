@@ -44,7 +44,7 @@ export default function SplashPage() {
         </button>
 
         {/* Footer */}
-        <p className="mt-12 text-xs text-gray-600">v1.0.0 • Made By Faizan • Team Shrug</p>
+        <p className="mt-12 text-xs text-gray-600">v1.9.0 • Made By Faizan • Team Shrug</p>
       </div>
 
       {/* PIN Modal */}
