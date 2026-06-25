@@ -27,6 +27,7 @@ export default function AttendanceRecords() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
+  const [employeeFilter, setEmployeeFilter] = useState<number | null>(null);
   const [actionLoading, setActionLoading] = useState<Record<number, boolean>>({});
   const [editingRecord, setEditingRecord] = useState<Attendance | null>(null);
   const [editClockIn, setEditClockIn] = useState('');
@@ -35,11 +36,12 @@ export default function AttendanceRecords() {
   const [selectedEmployee, setSelectedEmployee] = useState<number | null>(null);
   const [addClockIn, setAddClockIn] = useState('');
 
-  useEffect(() => { loadRecords(); loadEmployees(); }, []);
+  useEffect(() => { loadEmployees(); }, []);
+  useEffect(() => { loadRecords(); }, [employeeFilter, filter]);
 
   const loadRecords = async () => {
     try {
-      const res = await adminAttendanceApi.list();
+      const res = await adminAttendanceApi.list({ employee_id: employeeFilter || undefined });
       setRecords(Array.isArray(res) ? res : []);
     } catch { toast.error('Failed to load attendance'); }
     finally { setLoading(false); }
@@ -157,6 +159,16 @@ export default function AttendanceRecords() {
       </div>
 
       <div className="flex gap-2 mb-5 flex-wrap">
+        <select
+          value={employeeFilter || ''}
+          onChange={e => setEmployeeFilter(parseInt(e.target.value) || null)}
+          className="input-field w-auto text-sm"
+        >
+          <option value="">All Employees</option>
+          {employees.map(emp => (
+            <option key={emp.id} value={emp.id}>{emp.full_name}</option>
+          ))}
+        </select>
         {['', 'present', 'late', 'absent', 'incomplete'].map(s => (
           <button key={s} onClick={() => setFilter(s)} className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors ${filter === s ? 'bg-blue-500 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
             {s || 'All'}

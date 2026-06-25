@@ -312,6 +312,8 @@ def clock_out_employee(
             final_clock_out_time = shift_end_dt
 
     attendance.clock_out = final_clock_out_time.astimezone(timezone.utc)
+    # Recalculate hours and payment after setting clock_out
+    attendance = recalculate_attendance(db, attendance)
     log = AttendanceLog(
         employee_id=employee_id,
         action="clock_out",

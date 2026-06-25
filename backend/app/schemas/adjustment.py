@@ -15,6 +15,8 @@ class AdjustmentCreate(AdjustmentBase):
 class AdjustmentOut(AdjustmentBase):
     id: int
     created_at: datetime
+    employee_name: Optional[str] = None
+    employee_code: Optional[str] = None
 
     class Config:
         from_attributes = True
