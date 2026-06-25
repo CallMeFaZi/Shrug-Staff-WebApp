@@ -92,7 +92,7 @@ export default function AttendanceRecords() {
     setEditClockOut('');
   };
 
-  const handleUpdate = async () => {
+const handleUpdate = async () => {
     if (!editingRecord) return;
     setActionLoading(prev => ({ ...prev, [editingRecord.id]: true }));
     try {
@@ -119,6 +119,20 @@ export default function AttendanceRecords() {
       toast.error(e?.response?.data?.detail || 'Failed to update');
     } finally {
       setActionLoading(prev => ({ ...prev, [editingRecord.id]: false }));
+    }
+  };
+
+  const handleDelete = async (attendanceId: number) => {
+    if (!confirm('Delete this attendance record?')) return;
+    setActionLoading(prev => ({ ...prev, [attendanceId]: true }));
+    try {
+      await adminAttendanceApi.delete(attendanceId);
+      toast.success('Record deleted');
+      loadRecords();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Failed to delete');
+    } finally {
+      setActionLoading(prev => ({ ...prev, [attendanceId]: false }));
     }
   };
 
@@ -228,13 +242,20 @@ export default function AttendanceRecords() {
                           Clock Out
                         </button>
                       )}
-                      <button
-                        onClick={() => openEditModal(r)}
-                        disabled={actionLoading[r.id]}
-                        className="px-2 py-1 bg-gray-500/20 text-gray-300 rounded hover:bg-gray-500/30 disabled:opacity-50 transition-colors"
-                      >
-                        Edit
-                      </button>
+<button
+                         onClick={() => openEditModal(r)}
+                         disabled={actionLoading[r.id]}
+                         className="px-2 py-1 bg-gray-500/20 text-gray-300 rounded hover:bg-gray-500/30 disabled:opacity-50 transition-colors"
+                       >
+                         Edit
+                       </button>
+                       <button
+                         onClick={() => handleDelete(r.id)}
+                         disabled={actionLoading[r.id]}
+                         className="px-2 py-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 disabled:opacity-50 transition-colors"
+                       >
+                         Delete
+                       </button>
                     </div>
                   </td>
                 </tr>

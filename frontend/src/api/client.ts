@@ -119,8 +119,10 @@ export const adminAttendanceApi = {
     api.post(`/admin/attendance/${employeeId}/clock-out`, null, {
       params: { clock_out_time },
     }).then((r) => r.data),
-  update: (attendanceId: number, data: { clock_in_time?: string; clock_out_time?: string }) =>
+  update: (attendanceId: number, data: { clock_in_time?: string | null; clock_out_time?: string | null }) =>
     api.patch(`/admin/attendance/${attendanceId}`, data).then((r) => r.data),
+  delete: (attendanceId: number) =>
+    api.delete(`/admin/attendance/${attendanceId}`).then((r) => r.data),
 };
 
 // ============== Payroll ==============

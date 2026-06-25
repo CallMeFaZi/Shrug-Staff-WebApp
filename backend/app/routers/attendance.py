@@ -193,3 +193,18 @@ async def admin_update_attendance(
     db.commit()
     db.refresh(attendance)
     return attendance
+
+
+@router.delete("/admin/attendance/{attendance_id}")
+async def admin_delete_attendance(
+    attendance_id: int,
+    db: Session = Depends(get_db),
+    _admin: bool = Depends(require_admin),
+):
+    """Admin: delete an attendance record by ID."""
+    attendance = db.query(Attendance).filter(Attendance.id == attendance_id).first()
+    if not attendance:
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+    db.delete(attendance)
+    db.commit()
+    return {"message": "Attendance record deleted"}
